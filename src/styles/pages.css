@@ -1,0 +1,213 @@
+/* ═══════════════════════════════════════════════
+   Pages — Layout styles
+   ═══════════════════════════════════════════════ */
+
+/* ── App Shell ── */
+.app {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+  padding: var(--space-lg);
+  padding-bottom: calc(var(--space-2xl) + env(safe-area-inset-bottom, 0));
+}
+
+/* ── Home ── */
+.home__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+}
+
+.home__logo {
+  font-family: var(--font-display);
+  font-size: 28px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+
+.home__greeting {
+  font-size: 15px;
+  color: var(--text-2);
+  margin-bottom: var(--space-xl);
+}
+
+.home__greeting strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.home__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+
+.home__footer {
+  margin-top: auto;
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.home__footer-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.home__footer-row a {
+  color: var(--text-1);
+  font-weight: 500;
+}
+
+/* ── Page Header ── */
+.page-header {
+  font-family: var(--font-display);
+  font-size: 28px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-1);
+  margin-bottom: var(--space-lg);
+}
+
+/* ── Order Status Page ── */
+.order-page__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+
+.order-page__result {
+  animation: fadeUp 0.3s ease-out;
+}
+
+.order-page__hint {
+  font-size: 13px;
+  color: var(--text-3);
+  text-align: center;
+  margin-top: var(--space-md);
+}
+
+/* ── Catalog Page ── */
+.catalog-page__back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 14px;
+  color: var(--text-2);
+  margin-bottom: var(--space-lg);
+  cursor: pointer;
+}
+
+.catalog-page__items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.catalog-page__site-link {
+  display: block;
+  text-align: center;
+  padding: var(--space-lg);
+  font-size: 14px;
+  color: var(--text-2);
+  margin-top: var(--space-md);
+}
+
+.catalog-page__site-link span {
+  color: var(--amber);
+  font-weight: 500;
+}
+
+/* ── Repair Page ── */
+.repair-page__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.repair-page__submit {
+  margin-top: var(--space-sm);
+}
+
+.repair-page__trust {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--amber-soft);
+}
+
+.repair-page__trust-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.repair-page__trust-item span:first-child {
+  flex-shrink: 0;
+}
+
+/* ── Success screen ── */
+.success-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--space-lg);
+  padding: var(--space-2xl) var(--space-lg);
+  flex: 1;
+}
+
+.success-screen__icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--success-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes popIn {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.success-screen__title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.success-screen__text {
+  font-size: 15px;
+  color: var(--text-2);
+  line-height: 1.5;
+  max-width: 280px;
+}
