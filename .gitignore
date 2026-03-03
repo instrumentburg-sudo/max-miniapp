@@ -4,5 +4,6 @@ __pycache__/
 *.pyc
 .env
 .env.local
+api-php/.env
 *.log
 .DS_Store
