@@ -24,7 +24,7 @@ function load_env(): void
             }
             foreach ($lines as $line) {
                 $line = trim($line);
-                if ($line === '' || str_starts_with($line, '#')) {
+                if ($line === '' || $line[0] === '#') {
                     continue;
                 }
                 $pos = strpos($line, '=');
@@ -51,7 +51,7 @@ function env(string $key, string $default = ''): string
 
 // --- Helpers ---------------------------------------------------------------
 
-function json_response(mixed $data, int $code = 200): never
+function json_response($data, int $code = 200)
 {
     http_response_code($code);
     header('Content-Type: application/json; charset=utf-8');
@@ -224,28 +224,29 @@ function map_status(array $order): array
         'выдан'                => ['Выполнен', 'completed'],
     ];
 
-    // Try order.status as string
-    $rawStatus = '';
-    if (isset($order['status'])) {
-        if (is_string($order['status'])) {
-            $rawStatus = $order['status'];
-        } elseif (is_array($order['status']) && isset($order['status']['name'])) {
-            $rawStatus = (string)$order['status']['name'];
+    $statusObj = $order['status'] ?? null;
+
+    // Try status.type first (e.g. "inWork"), then status.name (e.g. "В работе")
+    $candidates = [];
+    if (is_array($statusObj)) {
+        if (isset($statusObj['type'])) $candidates[] = (string)$statusObj['type'];
+        if (isset($statusObj['name'])) $candidates[] = (string)$statusObj['name'];
+    } elseif (is_string($statusObj)) {
+        $candidates[] = $statusObj;
+    }
+
+    foreach ($candidates as $raw) {
+        if (isset($statusMap[$raw])) {
+            return ['status' => $statusMap[$raw][1], 'status_label' => $statusMap[$raw][0]];
+        }
+        $lower = mb_strtolower($raw);
+        if (isset($statusMap[$lower])) {
+            return ['status' => $statusMap[$lower][1], 'status_label' => $statusMap[$lower][0]];
         }
     }
 
-    // Look up in map (case-sensitive first, then lowercase)
-    if (isset($statusMap[$rawStatus])) {
-        return ['status' => $statusMap[$rawStatus][1], 'status_label' => $statusMap[$rawStatus][0]];
-    }
-
-    $lower = mb_strtolower($rawStatus);
-    if (isset($statusMap[$lower])) {
-        return ['status' => $statusMap[$lower][1], 'status_label' => $statusMap[$lower][0]];
-    }
-
     // Fallback
-    $label = $rawStatus !== '' ? $rawStatus : 'Неизвестно';
+    $label = $candidates[0] ?? 'Неизвестно';
     return ['status' => 'unknown', 'status_label' => $label];
 }
 
@@ -271,7 +272,9 @@ function format_order(array $order): array
             break;
         }
     }
-    $deviceName ??= 'Не указано';
+    if ($deviceName === null) {
+        $deviceName = 'Не указано';
+    }
 
     // estimated_cost
     $cost = null;
@@ -303,7 +306,7 @@ function format_order(array $order): array
 
 // --- Endpoint handlers -----------------------------------------------------
 
-function handle_health(): never
+function handle_health()
 {
     json_response([
         'status'  => 'ok',
@@ -311,7 +314,7 @@ function handle_health(): never
     ]);
 }
 
-function handle_order_lookup(string $number): never
+function handle_order_lookup(string $number)
 {
     if ($number === '') {
         json_response(['error' => 'Order number is required'], 400);
@@ -385,7 +388,7 @@ function handle_order_lookup(string $number): never
     json_response(['error' => 'Заказ не найден'], 404);
 }
 
-function handle_repair(): never
+function handle_repair()
 {
     $body = get_json_body();
 
@@ -496,7 +499,7 @@ if (!is_string($path)) {
 }
 
 // Strip /max-api prefix
-if (str_starts_with($path, '/max-api')) {
+if (substr($path, 0, 8) === '/max-api') {
     $path = substr($path, strlen('/max-api'));
     if ($path === '' || $path === false) {
         $path = '/';
