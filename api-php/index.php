@@ -4,7 +4,16 @@ declare(strict_types=1);
 
 // ---------------------------------------------------------------------------
 // MAX Mini App — PHP API
-// Endpoints: GET /health, GET /order/{number}, POST /repair
+// Endpoints: GET /health, GET /order/{number}, POST /repair, POST /bot/webhook
+//
+// POST /webhook and POST /debug below are a legacy bot handler that was
+// deployed straight to prod on 2026-03-04 and never committed to git (found
+// 2026-07-23 while building /bot/webhook for issue #266 — prod and this repo
+// had drifted). Recovered byte-for-byte from the live server and merged here
+// so it stops being a git blind spot. It targets the deprecated
+// platform-api.max.ru domain (current API is platform-api2.max.ru) and its
+// own MAX subscription (url=…/max-api/webhook) predates and is independent
+// of the /bot/webhook subscription added for #266 — not touched/fixed here.
 // ---------------------------------------------------------------------------
 
 // --- Environment -----------------------------------------------------------
@@ -173,8 +182,20 @@ function normalize_order_number(string $input): string
 {
     $input = mb_strtoupper(trim($input));
     $input = str_replace('#', '', $input);
+    // Homoglyph fix: Cyrillic А (U+0410) is visually identical to Latin A —
+    // common typo on mobile keyboards that auto-detect Cyrillic layout.
+    $input = str_replace("\xD0\x90", 'A', $input);
     // Strip leading 'A' prefix for comparison
     return ltrim($input, 'A');
+}
+
+function looks_like_order_number(string $text): bool
+{
+    if (trim($text) === '') {
+        return false;
+    }
+    $normalized = normalize_order_number($text);
+    return $normalized !== '' && ctype_digit($normalized);
 }
 
 function match_order_number(array $order, string $searchNormalized): bool
@@ -314,17 +335,23 @@ function handle_health()
     ]);
 }
 
-function handle_order_lookup(string $number)
+/**
+ * Looks up a LiveSklad order by its number/id. Shared by the /order/{number}
+ * route and the bot webhook — does not emit an HTTP response itself.
+ *
+ * @return array{ok: bool, http_code: int, order: ?array}
+ */
+function lookup_order_by_number(string $number): array
 {
     if ($number === '') {
-        json_response(['error' => 'Order number is required'], 400);
+        return ['ok' => false, 'http_code' => 400, 'order' => null];
     }
 
     $searchNormalized = normalize_order_number($number);
 
     $token = livesklad_auth();
     if ($token === null) {
-        json_response(['error' => 'Service temporarily unavailable'], 503);
+        return ['ok' => false, 'http_code' => 503, 'order' => null];
     }
 
     $retried = false;
@@ -333,7 +360,7 @@ function handle_order_lookup(string $number)
         $result = livesklad_fetch_orders($token, $page);
 
         if ($result === null) {
-            json_response(['error' => 'Service temporarily unavailable'], 503);
+            return ['ok' => false, 'http_code' => 503, 'order' => null];
         }
 
         // Re-auth on 401
@@ -341,7 +368,7 @@ function handle_order_lookup(string $number)
             $retried = true;
             $token = livesklad_auth();
             if ($token === null) {
-                json_response(['error' => 'Service temporarily unavailable'], 503);
+                return ['ok' => false, 'http_code' => 503, 'order' => null];
             }
             // Retry same page
             $page--;
@@ -350,13 +377,13 @@ function handle_order_lookup(string $number)
 
         if ($result['http_code'] !== 200) {
             error_log("[max-api] LiveSklad orders HTTP {$result['http_code']}: {$result['body']}");
-            json_response(['error' => 'Service temporarily unavailable'], 503);
+            return ['ok' => false, 'http_code' => 503, 'order' => null];
         }
 
         $data = json_decode($result['body'], true);
         if (!is_array($data)) {
             error_log('[max-api] LiveSklad orders invalid JSON');
-            json_response(['error' => 'Service temporarily unavailable'], 503);
+            return ['ok' => false, 'http_code' => 503, 'order' => null];
         }
 
         // LiveSklad may return orders in data.data, data.orders, or as top-level array
@@ -375,7 +402,7 @@ function handle_order_lookup(string $number)
                 continue;
             }
             if (match_order_number($order, $searchNormalized)) {
-                json_response(format_order($order));
+                return ['ok' => true, 'http_code' => 200, 'order' => $order];
             }
         }
 
@@ -385,7 +412,301 @@ function handle_order_lookup(string $number)
         }
     }
 
-    json_response(['error' => 'Заказ не найден'], 404);
+    return ['ok' => false, 'http_code' => 404, 'order' => null];
+}
+
+function handle_order_lookup(string $number)
+{
+    $result = lookup_order_by_number($number);
+
+    if (!$result['ok']) {
+        $messages = [
+            400 => 'Order number is required',
+            503 => 'Service temporarily unavailable',
+            404 => 'Заказ не найден',
+        ];
+        json_response(['error' => $messages[$result['http_code']] ?? 'Error'], $result['http_code']);
+    }
+
+    json_response(format_order($result['order']));
+}
+
+// --- MAX Bot API (outgoing) -------------------------------------------------
+
+const MAX_BOT_API_BASE = 'https://platform-api2.max.ru';
+const MAX_MINIAPP_URL  = 'https://instrumentburg.ru/max-app/';
+
+function max_open_app_button(string $text): array
+{
+    return [
+        'type'    => 'open_app',
+        'text'    => $text,
+        'web_app' => MAX_MINIAPP_URL,
+    ];
+}
+
+function max_send_message(int $userId, string $text, array $buttonRows): void
+{
+    $token = env('MAX_BOT_TOKEN');
+    if ($token === '') {
+        error_log('[max-api] MAX_BOT_TOKEN not set, cannot send bot reply');
+        return;
+    }
+
+    $payload = json_encode([
+        'text'        => $text,
+        'attachments' => [
+            [
+                'type'    => 'inline_keyboard',
+                'payload' => ['buttons' => $buttonRows],
+            ],
+        ],
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    $url = MAX_BOT_API_BASE . '/messages?' . http_build_query(['user_id' => $userId]);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_HTTPHEADER     => ["Authorization: $token", 'Content-Type: application/json'],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+    ]);
+    // platform-api2.max.ru's certificate chains to the Russian Ministry of
+    // Digital Development root CA, which is not in the system trust store.
+    // Bundle it explicitly instead of disabling verification.
+    $maxCaBundle = __DIR__ . '/max-ru-ca.pem';
+    if (is_file($maxCaBundle)) {
+        curl_setopt($ch, CURLOPT_CAINFO, $maxCaBundle);
+    }
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error    = curl_error($ch);
+    curl_close($ch);
+
+    if ($response === false) {
+        error_log("[max-api] MAX send message curl error: $error");
+        return;
+    }
+
+    if ($httpCode !== 200) {
+        error_log("[max-api] MAX send message HTTP $httpCode: $response");
+    }
+}
+
+// --- Bot webhook (incoming) -------------------------------------------------
+
+function respond_to_order_query(int $userId, string $rawText): void
+{
+    $trimmed = trim($rawText);
+
+    if (looks_like_order_number($trimmed)) {
+        $result = lookup_order_by_number($trimmed);
+
+        if ($result['ok']) {
+            $formatted = format_order($result['order']);
+            max_send_message(
+                $userId,
+                "Заказ {$formatted['order_number']} — статус: «{$formatted['status_label']}».",
+                [[max_open_app_button('Подробнее в мини-приложении')]]
+            );
+            return;
+        }
+
+        max_send_message(
+            $userId,
+            "Не нашли заказ с номером {$trimmed}. Сверьте номер в квитанции или позвоните: +7 (343) 226-44-43 (ежедневно 9:00–18:00).",
+            [[max_open_app_button('Открыть проверку статуса')]]
+        );
+        return;
+    }
+
+    max_send_message(
+        $userId,
+        'Здравствуйте! Это бот ИнструментБург. Пришлите номер заказа из квитанции (например, A023222) — покажем статус ремонта.',
+        [[max_open_app_button('Проверить статус')]]
+    );
+}
+
+function process_bot_update(array $update): void
+{
+    $updateType = (string)($update['update_type'] ?? '');
+    if ($updateType !== 'message_created') {
+        // bot_started, message_callback, etc. are outside this webhook's scope.
+        return;
+    }
+
+    $message = $update['message'] ?? null;
+    if (!is_array($message)) {
+        return;
+    }
+
+    $sender = $message['sender'] ?? null;
+    $userId = is_array($sender) ? ($sender['user_id'] ?? null) : null;
+    if ($userId === null || !is_numeric($userId)) {
+        return;
+    }
+
+    $body = $message['body'] ?? null;
+    $text = is_array($body) ? (string)($body['text'] ?? '') : '';
+
+    respond_to_order_query((int)$userId, $text);
+}
+
+function handle_bot_webhook(): void
+{
+    $secretHeader   = $_SERVER['HTTP_X_MAX_BOT_API_SECRET'] ?? '';
+    $expectedSecret = env('MAX_WEBHOOK_SECRET');
+
+    if ($expectedSecret === '' || !hash_equals($expectedSecret, $secretHeader)) {
+        json_response(['error' => 'Forbidden'], 403);
+    }
+
+    // From here on, MAX must always get HTTP 200 — internal failures go to the log only.
+    try {
+        $update = get_json_body();
+        process_bot_update($update);
+    } catch (\Throwable $e) {
+        error_log('[max-api] bot webhook error: ' . $e->getMessage());
+    }
+
+    json_response(['ok' => true]);
+}
+
+// --- Legacy MAX bot webhook (recovered from prod, see header comment) ------
+
+function legacy_max_send_message(int $chatId, string $text, array $attachments = []): void
+{
+    $token = env('MAX_BOT_TOKEN');
+    if ($token === '') {
+        error_log('[max-api] MAX_BOT_TOKEN not set');
+        return;
+    }
+
+    $payload = ['chat_id' => $chatId, 'text' => $text];
+    if (!empty($attachments)) {
+        $payload['attachments'] = $attachments;
+    }
+
+    $ch = curl_init('https://platform-api.max.ru/messages');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: ' . $token,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error    = curl_error($ch);
+    curl_close($ch);
+
+    if ($response === false) {
+        error_log("[max-api] MAX send_message curl error: $error");
+    } elseif ($httpCode !== 200) {
+        error_log("[max-api] MAX send_message HTTP $httpCode: $response");
+    }
+}
+
+function handle_legacy_webhook(): void
+{
+    $raw = file_get_contents('php://input');
+    if ($raw === false || $raw === '') {
+        json_response(['ok' => true]);
+    }
+
+    $update = json_decode($raw, true);
+    if (!is_array($update)) {
+        json_response(['ok' => true]);
+    }
+
+    // Log for debugging (remove in production)
+    error_log('[max-api] webhook: ' . substr($raw, 0, 2000));
+
+    $type = $update['update_type'] ?? '';
+
+    if ($type === 'bot_started') {
+        $chatId = $update['chat_id'] ?? null;
+        if ($chatId !== null) {
+            $welcome = "Добро пожаловать в ИнструментБург!\n\n"
+                     . "Аренда и ремонт строительного инструмента в Екатеринбурге.\n\n"
+                     . "Что вы хотите сделать?";
+            $keyboard = [
+                'type' => 'inline_keyboard',
+                'payload' => ['buttons' => [
+                    [['type' => 'link', 'text' => 'Открыть приложение', 'url' => 'https://instrumentburg.ru/max-app/']],
+                    [['type' => 'link', 'text' => 'Проверить статус заказа', 'url' => 'https://instrumentburg.ru/max-app/order']],
+                    [['type' => 'link', 'text' => 'Записаться на ремонт', 'url' => 'https://instrumentburg.ru/max-app/repair']],
+                    [['type' => 'callback', 'text' => 'Позвонить нам', 'payload' => 'phone']],
+                ]],
+            ];
+            legacy_max_send_message((int)$chatId, $welcome, [$keyboard]);
+        }
+        json_response(['ok' => true]);
+    }
+
+    if ($type === 'message_created') {
+        $body  = $update['message']['body'] ?? [];
+        $text  = $body['text'] ?? '';
+        $chatId = $body['chat_id'] ?? ($update['message']['recipient']['chat_id'] ?? null);
+
+        if ($chatId === null) {
+            json_response(['ok' => true]);
+        }
+
+        $lower = mb_strtolower(trim($text));
+
+        if ($lower === '/start' || $lower === 'start' || $lower === 'привет') {
+            $welcome = "Добро пожаловать в ИнструментБург!\n\n"
+                     . "Аренда и ремонт строительного инструмента в Екатеринбурге.\n\n"
+                     . "Нажмите кнопку ниже для перехода в приложение.";
+            $keyboard = [
+                'type' => 'inline_keyboard',
+                'payload' => ['buttons' => [
+                    [['type' => 'link', 'text' => 'Открыть приложение', 'url' => 'https://instrumentburg.ru/max-app/']],
+                    [['type' => 'callback', 'text' => 'Позвонить нам', 'payload' => 'phone']],
+                ]],
+            ];
+            legacy_max_send_message((int)$chatId, $welcome, [$keyboard]);
+        } else {
+            $reply = "Для работы с приложением используйте кнопку в меню бота.\n\n"
+                   . "Или позвоните: +7 (343) 226-44-43";
+            legacy_max_send_message((int)$chatId, $reply);
+        }
+        json_response(['ok' => true]);
+    }
+
+    if ($type === 'message_callback') {
+        $cb      = $update['callback'] ?? [];
+        $payload = $cb['payload'] ?? '';
+        $chatId  = $cb['chat_id'] ?? null;
+
+        if ($chatId !== null && $payload === 'phone') {
+            $phoneMsg = "ИнструментБург\n\n"
+                      . "+7 (343) 226-44-43 — основной\n"
+                      . "+7 (343) 226-44-43 — дополнительный\n\n"
+                      . "Пн-Пт: 9:00-18:00, Сб: 10:00-15:00";
+            legacy_max_send_message((int)$chatId, $phoneMsg);
+        }
+        json_response(['ok' => true]);
+    }
+
+    json_response(['ok' => true]);
+}
+
+function handle_legacy_debug(): void
+{
+    $raw = file_get_contents('php://input');
+    $logFile = '/home/c50684/instrumentburg.ru/max-api-env/debug.log';
+    $entry = date('Y-m-d H:i:s') . " | " . ($_SERVER['REMOTE_ADDR'] ?? '?') . "\n" . $raw . "\n---\n";
+    file_put_contents($logFile, $entry, FILE_APPEND);
+    json_response(['ok' => true]);
 }
 
 function handle_repair()
@@ -517,6 +838,19 @@ if ($method === 'GET' && preg_match('#^/order/([^/]+)$#', $path, $m)) {
 
 if ($method === 'POST' && $path === '/repair') {
     handle_repair();
+}
+
+if ($method === 'POST' && $path === '/bot/webhook') {
+    handle_bot_webhook();
+}
+
+// Legacy routes — recovered from prod, see header comment.
+if ($method === 'POST' && $path === '/webhook') {
+    handle_legacy_webhook();
+}
+
+if ($method === 'POST' && $path === '/debug') {
+    handle_legacy_debug();
 }
 
 // 404

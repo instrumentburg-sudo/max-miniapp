@@ -26,7 +26,7 @@ fi
 if [[ "$mode" == "all" || "$mode" == "--api-only" ]]; then
   echo "==> Deploying PHP API to $SSH_HOST:$REMOTE_API/"
   ssh "$SSH_HOST" "mkdir -p $REMOTE_API"
-  scp api-php/index.php api-php/.htaccess "$SSH_HOST:$REMOTE_API/"
+  scp api-php/index.php api-php/.htaccess api-php/max-ru-ca.pem "$SSH_HOST:$REMOTE_API/"
   echo "    PHP API deployed."
 
   echo "==> Verifying API health..."
