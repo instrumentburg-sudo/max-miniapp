@@ -7,7 +7,7 @@
 1. **Секреты в `~/.config/instrumentburg/api-keys.env` / `/home/c50684/instrumentburg.ru/max-api-env/.env`** — НИКОГДА не хардкодить в git-tracked файлах.
 2. **Текущий роутинг — BrowserRouter с `basename="/max-app"`**. Старые планы про HashRouter устарели: переход `HashRouter → BrowserRouter` был сделан, чтобы исправить чёрный экран в MAX WebView.
 3. **MAX Bridge через `<script>` тег** — НЕ npm-пакет. Глобальный `window.WebApp`.
-4. **LiveSklad не имеет lookup by number** — поиск заказа перебирает страницы заказов.
+4. **LiveSklad ищет по номеру: `GET /company/orders?number=A0XXXXX&limit=10`.** Раньше здесь было записано обратное, и поиск листал 5 страниц по 50 — видел только ~250 последних заказов, поэтому заказ от июня не находился ни в мини-аппе, ни у бота (жалоба Антона 25.07). Тот же фильтр давно использует калькулятор (`convex/livesklad.ts:searchOrders`). `pageSize` больше 50 API игнорирует — листать бесполезно.
 5. **Production API сейчас PHP**: `api-php/index.php` на NetAngels (`/max-api/*`). `api/main.py` — старый FastAPI-вариант/референс, не считать его production без проверки деплоя.
 6. **Ремонтные заявки → Telegram** — LiveSklad не поддерживает создание заказов через API.
 
@@ -60,7 +60,11 @@ cd api && python main.py   # FastAPI (port 8100)
 
 **API auth**: Frontend шлёт `X-Init-Data` header. Backend валидирует HMAC или пропускает в dev-режиме.
 
-**Order lookup**: LiveSklad номера формата `A023222`. Клиент ищет по `number` полю, перебирая до 250 заказов.
+**Order lookup**: номера формата `A023222` (A + 6 цифр с ведущим нулём). `order_number_candidates()` строит варианты написания (без префикса, без нуля, кириллическая «А»), каждый уходит в `?number=` — обычно хватает одного запроса, находит заказ любой давности.
+
+**Кэш токена LiveSklad** (по образцу `convex/lib/liveskladAuth.ts` калькулятора): `/auth` жёстко лимитирован, поэтому токен (ttl 900 с) лежит в `/home/c50684/instrumentburg.ru/max-api-env/.livesklad-token.json` (chmod 600, вне `www` — файл с живым токеном не должен отдаваться по HTTP). На 429 туда пишется `banned_until` из `expireDate`, и запросы фейлятся быстро вместо долбёжки API.
+
+**Ошибки различаются**: 404 «заказ не найден» ≠ 429/503 «сервис учёта занят». И бот, и мини-апп говорят про временную недоступность отдельным текстом — иначе клиент идёт сверять правильный номер зря.
 
 **Repair flow**: Форма → POST `/repair` → Telegram notification в чат "ИБ задачи" (`-5208079994`).
 

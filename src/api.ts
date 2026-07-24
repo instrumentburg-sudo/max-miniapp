@@ -7,6 +7,18 @@ interface ApiOptions {
   body?: Record<string, unknown>;
 }
 
+/**
+ * Ошибка запроса с сохранённым статусом и текстом от API. Без неё вызывающий
+ * код не мог отличить «заказа нет» (404) от «сервис учёта занят» (429/503) и
+ * показывал клиенту «Заказ не найден» даже когда номер был правильный.
+ */
+export class ApiError extends Error {
+  constructor(readonly status: number, readonly apiMessage: string | null) {
+    super(apiMessage ?? `API ${status}`);
+    this.name = 'ApiError';
+  }
+}
+
 async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<T> {
   const { method = 'GET', body } = opts;
 
@@ -26,7 +38,14 @@ async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<T> {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`API ${res.status}: ${text}`);
+    let apiMessage: string | null = null;
+    try {
+      const parsed = JSON.parse(text) as { error?: unknown };
+      if (typeof parsed.error === 'string') apiMessage = parsed.error;
+    } catch {
+      // не JSON — оставляем null, покажем свой текст
+    }
+    throw new ApiError(res.status, apiMessage);
   }
 
   return res.json() as Promise<T>;

@@ -113,8 +113,101 @@ function handle_cors(): void
 
 // --- LiveSklad client ------------------------------------------------------
 
-function livesklad_auth(): ?string
+// --- LiveSklad token cache -------------------------------------------------
+//
+// Mirrors convex/lib/liveskladAuth.ts in the calculator: /auth is hard
+// rate-limited, and every uncached lookup used to burn a fresh token. The token
+// lives ~15 min (`ttl` in the response), so cache it on disk between requests
+// and, once LiveSklad answers 429, store a ban marker instead of hammering it.
+
+const LS_TOKEN_SAFETY_MARGIN_SEC = 60;   // refresh slightly before real expiry
+const LS_DEFAULT_TTL_SEC         = 900;  // LiveSklad currently reports ttl=900
+const LS_BAN_FALLBACK_SEC        = 60;   // 429 without expireDate
+const LS_BAN_MAX_SEC             = 1800;
+
+function livesklad_cache_path(): string
 {
+    // Outside www: the file holds a live API token and must never be servable.
+    $envDir = '/home/c50684/instrumentburg.ru/max-api-env';
+    $dir    = is_dir($envDir) && is_writable($envDir) ? $envDir : sys_get_temp_dir();
+
+    return $dir . '/.livesklad-token.json';
+}
+
+function livesklad_cache_read(): array
+{
+    $raw = @file_get_contents(livesklad_cache_path());
+    if ($raw === false || $raw === '') {
+        return [];
+    }
+    $data = json_decode($raw, true);
+
+    return is_array($data) ? $data : [];
+}
+
+function livesklad_cache_write(array $data): void
+{
+    $path = livesklad_cache_path();
+    // Atomic replace so a concurrent reader never sees a half-written file.
+    $tmp = $path . '.' . getmypid() . '.tmp';
+    if (@file_put_contents($tmp, json_encode($data)) === false) {
+        return;
+    }
+    @chmod($tmp, 0600);
+    @rename($tmp, $path);
+}
+
+/**
+ * Seconds left on an active 429 ban, or 0 when we're free to call LiveSklad.
+ */
+function livesklad_ban_seconds_left(): int
+{
+    $cache = livesklad_cache_read();
+    $until = isset($cache['banned_until']) ? (int)$cache['banned_until'] : 0;
+
+    return $until > time() ? $until - time() : 0;
+}
+
+/**
+ * Remembers a 429 so the next requests fail fast instead of piling onto the
+ * banned endpoint. `expireDate` comes from LiveSklad's error body.
+ */
+function livesklad_mark_banned(string $body): void
+{
+    $until = time() + LS_BAN_FALLBACK_SEC;
+
+    $parsed = json_decode($body, true);
+    $expire = $parsed['error']['expireDate'] ?? null;
+    if (is_string($expire)) {
+        $ts = strtotime($expire);
+        if ($ts !== false && $ts > time()) {
+            $until = min($ts + 1, time() + LS_BAN_MAX_SEC);
+        }
+    }
+
+    $cache = livesklad_cache_read();
+    $cache['banned_until'] = $until;
+    unset($cache['token'], $cache['expires_at']);
+    livesklad_cache_write($cache);
+
+    error_log('[max-api] LiveSklad 429 — ban marker until ' . date('c', $until));
+}
+
+function livesklad_auth(bool $forceRefresh = false): ?string
+{
+    if (!$forceRefresh) {
+        $cache = livesklad_cache_read();
+        $token = $cache['token'] ?? '';
+        $expiresAt = isset($cache['expires_at']) ? (int)$cache['expires_at'] : 0;
+        if (is_string($token) && $token !== '' && $expiresAt - LS_TOKEN_SAFETY_MARGIN_SEC > time()) {
+            return $token;
+        }
+    }
+
+    if (livesklad_ban_seconds_left() > 0) {
+        return null;
+    }
+
     $login    = env('LIVESKLAD_LOGIN');
     $password = env('LIVESKLAD_PASSWORD');
 
@@ -142,22 +235,52 @@ function livesklad_auth(): ?string
         return null;
     }
 
+    if ($httpCode === 429) {
+        livesklad_mark_banned((string)$response);
+        return null;
+    }
+
     if ($httpCode !== 200) {
         error_log("[max-api] LiveSklad auth HTTP $httpCode: $response");
         return null;
     }
 
-    $data = json_decode($response, true);
-    return $data['token'] ?? null;
+    $data  = json_decode($response, true);
+    $token = $data['token'] ?? null;
+    if (!is_string($token) || $token === '') {
+        return null;
+    }
+
+    $ttl   = isset($data['ttl']) && is_numeric($data['ttl']) && $data['ttl'] > 0
+        ? (int)$data['ttl']
+        : LS_DEFAULT_TTL_SEC;
+    $cache = livesklad_cache_read();
+    unset($cache['banned_until']);
+    $cache['token']      = $token;
+    $cache['expires_at'] = time() + $ttl;
+    livesklad_cache_write($cache);
+
+    return $token;
 }
 
-function livesklad_fetch_orders(string $token, int $page): ?array
+/**
+ * Точечный поиск заказа: LiveSklad принимает `number` фильтром, поэтому листать
+ * страницы не нужно — и находятся заказы любой давности, а не только последние
+ * 250 (именно поэтому раньше «А024337» от 08.06 не находился ни в мини-аппе,
+ * ни у бота). Тот же приём используется в калькуляторе: convex/livesklad.ts.
+ */
+function livesklad_fetch_by_number(string $token, string $number): ?array
 {
     $url = 'https://api.livesklad.com/company/orders?' . http_build_query([
-        'pageSize' => 50,
-        'page'     => $page,
+        'number' => $number,
+        'limit'  => 10,
     ]);
 
+    return livesklad_request($url, $token);
+}
+
+function livesklad_request(string $url, string $token): ?array
+{
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_HTTPHEADER     => ["Authorization: $token"],
@@ -175,7 +298,51 @@ function livesklad_fetch_orders(string $token, int $page): ?array
         return null;
     }
 
+    if ($httpCode === 429) {
+        livesklad_mark_banned((string)$response);
+    }
+
     return ['http_code' => $httpCode, 'body' => $response];
+}
+
+/**
+ * Order numbers a customer might type for the same order: LiveSklad stores
+ * «A» + six digits with a leading zero (A025121), people drop the prefix
+ * («25121»), the zero, or type the Cyrillic «А».
+ */
+function order_number_candidates(string $rawInput): array
+{
+    $candidates = [];
+
+    $digits = extract_order_number($rawInput);
+    if ($digits !== null) {
+        // Шестизначная форма первой: именно так номер лежит в LiveSklad,
+        // остальные варианты — запасные, чтобы не тратить лишний запрос.
+        $trimmed = ltrim($digits, '0');
+        $padded  = str_pad($trimmed, 6, '0', STR_PAD_LEFT);
+        $variants = [$padded, $digits, $trimmed];
+
+        // Legacy-строки лежат как «A0» + шестизначный номер (A0022962) —
+        // так же, как их ищет калькулятор (buildLiveskladNumberCandidates).
+        if (preg_match('/^0\d{5}$/', $padded) === 1) {
+            $variants[] = '0' . $padded;
+        }
+
+        foreach ($variants as $variant) {
+            if ($variant !== '') {
+                $candidates[] = 'A' . $variant;
+            }
+        }
+    }
+
+    // Free-form input that isn't digits at all (a legacy prefix, say) still
+    // gets one straight attempt after homoglyph normalisation.
+    $direct = str_replace(["\xD0\x90", '#', ' '], ['A', '', ''], mb_strtoupper(trim($rawInput)));
+    if ($direct !== '' && preg_match('/^A?\d+$/', $direct) === 1) {
+        $candidates[] = $direct[0] === 'A' ? $direct : 'A' . $direct;
+    }
+
+    return array_values(array_unique($candidates));
 }
 
 function normalize_order_number(string $input): string
@@ -371,45 +538,88 @@ function handle_health()
 }
 
 /**
- * Looks up a LiveSklad order by its number/id. Shared by the /order/{number}
+ * Extracts the order list out of a LiveSklad response: it nests them under
+ * data / data.data / orders depending on the endpoint.
+ */
+function livesklad_orders_from_body(string $body): ?array
+{
+    $data = json_decode($body, true);
+    if (!is_array($data)) {
+        error_log('[max-api] LiveSklad orders invalid JSON');
+        return null;
+    }
+
+    $orders = $data['data'] ?? $data['orders'] ?? $data;
+    if (!is_array($orders)) {
+        return [];
+    }
+    if (isset($orders['data']) && is_array($orders['data'])) {
+        $orders = $orders['data'];
+    }
+
+    return $orders;
+}
+
+/**
+ * Looks up a LiveSklad order by its number. Shared by the /order/{number}
  * route and the bot webhook — does not emit an HTTP response itself.
  *
- * @return array{ok: bool, http_code: int, order: ?array}
+ * Queries `company/orders?number=…` per candidate spelling instead of paging
+ * through the list: the filter matches orders of any age, while paging only
+ * ever saw the ~250 most recent ones (an order from June was simply invisible).
+ *
+ * @return array{ok: bool, http_code: int, order: ?array, retry_after?: int}
  */
 function lookup_order_by_number(string $number): array
 {
-    if ($number === '') {
+    if (trim($number) === '') {
         return ['ok' => false, 'http_code' => 400, 'order' => null];
     }
 
-    // Free-form input («А025121 от 20 07.2026») reaches this both from the
-    // mini-app form and from bot messages — pull the number out first.
-    $searchNormalized = extract_order_number($number) ?? normalize_order_number($number);
+    $candidates = order_number_candidates($number);
+    if ($candidates === []) {
+        return ['ok' => false, 'http_code' => 404, 'order' => null];
+    }
+
+    $banLeft = livesklad_ban_seconds_left();
+    if ($banLeft > 0) {
+        return ['ok' => false, 'http_code' => 429, 'order' => null, 'retry_after' => $banLeft];
+    }
 
     $token = livesklad_auth();
     if ($token === null) {
-        return ['ok' => false, 'http_code' => 503, 'order' => null];
+        $banLeft = livesklad_ban_seconds_left();
+        return $banLeft > 0
+            ? ['ok' => false, 'http_code' => 429, 'order' => null, 'retry_after' => $banLeft]
+            : ['ok' => false, 'http_code' => 503, 'order' => null];
     }
 
-    $retried = false;
+    $searchNormalized = extract_order_number($number) ?? normalize_order_number($number);
+    $retried          = false;
 
-    for ($page = 1; $page <= 5; $page++) {
-        $result = livesklad_fetch_orders($token, $page);
+    foreach ($candidates as $candidate) {
+        $result = livesklad_fetch_by_number($token, $candidate);
 
         if ($result === null) {
             return ['ok' => false, 'http_code' => 503, 'order' => null];
         }
 
-        // Re-auth on 401
+        // Token expired mid-flight — refresh once and retry the same candidate.
         if ($result['http_code'] === 401 && !$retried) {
             $retried = true;
-            $token = livesklad_auth();
+            $token   = livesklad_auth(true);
             if ($token === null) {
                 return ['ok' => false, 'http_code' => 503, 'order' => null];
             }
-            // Retry same page
-            $page--;
-            continue;
+            $result = livesklad_fetch_by_number($token, $candidate);
+            if ($result === null) {
+                return ['ok' => false, 'http_code' => 503, 'order' => null];
+            }
+        }
+
+        if ($result['http_code'] === 429) {
+            $banLeft = max(1, livesklad_ban_seconds_left());
+            return ['ok' => false, 'http_code' => 429, 'order' => null, 'retry_after' => $banLeft];
         }
 
         if ($result['http_code'] !== 200) {
@@ -417,35 +627,19 @@ function lookup_order_by_number(string $number): array
             return ['ok' => false, 'http_code' => 503, 'order' => null];
         }
 
-        $data = json_decode($result['body'], true);
-        if (!is_array($data)) {
-            error_log('[max-api] LiveSklad orders invalid JSON');
+        $orders = livesklad_orders_from_body($result['body']);
+        if ($orders === null) {
             return ['ok' => false, 'http_code' => 503, 'order' => null];
-        }
-
-        // LiveSklad may return orders in data.data, data.orders, or as top-level array
-        $orders = $data['data'] ?? $data['orders'] ?? $data;
-        if (!is_array($orders)) {
-            $orders = [];
-        }
-
-        // If nested under another key (data.data is common)
-        if (isset($orders['data']) && is_array($orders['data'])) {
-            $orders = $orders['data'];
         }
 
         foreach ($orders as $order) {
             if (!is_array($order)) {
                 continue;
             }
+            // The filter is a search, not an exact match — verify the number.
             if (match_order_number($order, $searchNormalized)) {
                 return ['ok' => true, 'http_code' => 200, 'order' => $order];
             }
-        }
-
-        // If we got fewer orders than pageSize, no more pages
-        if (count($orders) < 50) {
-            break;
         }
     }
 
@@ -457,9 +651,17 @@ function handle_order_lookup(string $number)
     $result = lookup_order_by_number($number);
 
     if (!$result['ok']) {
+        if ($result['http_code'] === 429) {
+            $wait = $result['retry_after'] ?? 60;
+            header('Retry-After: ' . $wait);
+            json_response([
+                'error' => "Сервис учёта временно ограничил запросы. Попробуйте через {$wait} сек.",
+            ], 429);
+        }
+
         $messages = [
             400 => 'Order number is required',
-            503 => 'Service temporarily unavailable',
+            503 => 'Сервис учёта сейчас недоступен. Попробуйте через минуту или позвоните: +7 (343) 226-44-43.',
             404 => 'Заказ не найден',
         ];
         json_response(['error' => $messages[$result['http_code']] ?? 'Error'], $result['http_code']);
@@ -587,6 +789,18 @@ function respond_to_order_query(int $userId, string $rawText): void
                 $userId,
                 format_order_reply(format_order($result['order'])),
                 [[max_miniapp_button('Подробнее в мини-приложении')]]
+            );
+            return;
+        }
+
+        // «Сервис занят» — не то же самое, что «такого заказа нет»: раньше
+        // клиент в обоих случаях слышал «не нашли» и шёл сверять номер зря.
+        if ($result['http_code'] === 429 || $result['http_code'] === 503) {
+            $wait = $result['retry_after'] ?? 60;
+            max_send_message(
+                $userId,
+                "Сервис учёта сейчас не отвечает — не можем посмотреть заказ. Повторите примерно через {$wait} сек. или позвоните: +7 (343) 226-44-43 (ежедневно 9:00–18:00).",
+                [[max_miniapp_button('Проверить статус')]]
             );
             return;
         }

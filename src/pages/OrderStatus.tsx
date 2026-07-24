@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { hapticTap, hapticSuccess, hapticError } from '../bridge';
-import { fetchOrderStatus, type OrderStatus as OrderStatusType } from '../api';
+import { ApiError, fetchOrderStatus, type OrderStatus as OrderStatusType } from '../api';
 
 const STATUS_LABELS: Record<string, string> = {
   received: 'Принят',
@@ -30,8 +30,19 @@ export function OrderStatus() {
       const result = await fetchOrderStatus(orderNumber.trim());
       setOrder(result);
       hapticSuccess();
-    } catch {
-      setError('Заказ не найден. Проверьте номер и попробуйте снова.');
+    } catch (e) {
+      // Раньше любая ошибка показывалась как «Заказ не найден», и клиент шёл
+      // сверять правильный номер, когда на деле не отвечал сервис учёта.
+      if (e instanceof ApiError && e.status !== 404) {
+        setError(
+          e.apiMessage ??
+            'Не смогли проверить статус — сервис временно недоступен. Попробуйте через минуту или позвоните: +7 (343) 226-44-43.',
+        );
+      } else if (e instanceof ApiError) {
+        setError('Заказ не найден. Сверьте номер в квитанции — он вида A023222.');
+      } else {
+        setError('Нет связи с сервисом. Проверьте интернет и попробуйте снова.');
+      }
       hapticError();
     } finally {
       setLoading(false);
@@ -54,7 +65,7 @@ export function OrderStatus() {
             id="order-num"
             className="input-group__field"
             type="text"
-            placeholder="RM-2024-00350"
+            placeholder="A023222"
             value={orderNumber}
             onChange={(e) => setOrderNumber(e.target.value)}
             autoComplete="off"
