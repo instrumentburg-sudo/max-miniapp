@@ -52,7 +52,11 @@ cd api && python main.py   # FastAPI (port 8100)
 
 **MAX Bridge**: `bridge.ts` экспортирует typed helpers (`getUser()`, `hapticTap()`, `signalReady()`). WebApp может быть `undefined` вне MAX.
 
-**MAX-бот (диалог)**: username `id662337117117_bot`. Диплинк на чат: `https://max.ru/id662337117117_bot?start`; на мини-приложение: `https://max.ru/id662337117117_bot?startapp`. Webhook `POST /bot/webhook` в `api-php/index.php` — клиент присылает номер заказа текстом, бот отвечает статусом + кнопкой `open_app` в мини-приложение. Подписка регистрируется через `POST https://platform-api2.max.ru/subscriptions`.
+**MAX-бот (диалог)**: username `id662337117117_bot`. Диплинк на чат: `https://max.ru/id662337117117_bot?start`; на мини-приложение: `https://max.ru/id662337117117_bot?startapp`. Webhook `POST /bot/webhook` в `api-php/index.php` — клиент присылает номер заказа текстом, бот отвечает статусом + кнопкой в мини-приложение. Подписка (`POST https://platform-api2.max.ru/subscriptions`) слушает `message_created` и `bot_started`.
+
+**⚠️ Кнопка mini-app — только `type: link` на `?startapp`.** `type: open_app` принимает `web_app` строкой-URL и резолвит её по своему реестру связанных mini-app; наш URL там не зарегистрирован, и MAX валит ВЕСЬ `POST /messages` с `404 {"code":"not.found", … LinkPK{name='https://instrumentburg.ru/max-app/'}}` — клиент не получает вообще ничего (так бот молчал 23–24.07.2026). Проверенные варианты: `web_app` объектом → 400 «Can't deserialize body», `contact_id` → 400 «Field 'webApp' cannot be null».
+
+**Распознавание номера заказа**: `extract_order_number()` вытаскивает номер из свободного текста («А025121 от 20 07.2026»). С префиксом «A» — 3–10 цифр; без префикса доверяем только длине LiveSklad-номера (5–7 цифр), иначе моделями инструмента и ценами («Bosch GSR 180», «ремонт 1500») забивался бы поиск. Телефоны вырезаются до разбора.
 
 **API auth**: Frontend шлёт `X-Init-Data` header. Backend валидирует HMAC или пропускает в dev-режиме.
 

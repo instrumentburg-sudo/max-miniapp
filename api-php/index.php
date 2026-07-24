@@ -189,13 +189,41 @@ function normalize_order_number(string $input): string
     return ltrim($input, 'A');
 }
 
+/**
+ * Pulls the order number out of free-form text. Clients rarely send a bare
+ * number: they copy the whole receipt line («А025121 от 20 07.2026») or write
+ * a sentence around it. Returns the digits only, or null if nothing looks like
+ * an order number.
+ */
+function extract_order_number(string $text): ?string
+{
+    $text = mb_strtoupper(trim($text));
+    $text = str_replace(["\xD0\x90", '#'], ['A', ''], $text);
+
+    // Prefer an A-prefixed run of digits — that's the receipt format.
+    if (preg_match('/A\s*(\d{3,10})/u', $text, $m) === 1) {
+        return $m[1];
+    }
+
+    // Strip phone numbers first: a customer who writes «заказ 25121, звоните
+    // +7 900 …» still asks about an order, but chunks of the phone must not be
+    // mistaken for one.
+    $text = preg_replace('/(?:\+7|\b8)[\s()-]*\d{3}[\s()-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}/u', ' ', $text);
+
+    // Without the «A» prefix only the LiveSklad number length is trustworthy
+    // (A023222 → 6 digits, 5 once a leading zero is dropped). Shorter runs are
+    // tool models and prices («Bosch GSR 180», «ремонт 1500»), longer ones are
+    // phones and card numbers.
+    if (preg_match('/(?<![\d.])(\d{5,7})(?![\d.])/u', $text, $m) === 1) {
+        return $m[1];
+    }
+
+    return null;
+}
+
 function looks_like_order_number(string $text): bool
 {
-    if (trim($text) === '') {
-        return false;
-    }
-    $normalized = normalize_order_number($text);
-    return $normalized !== '' && ctype_digit($normalized);
+    return extract_order_number($text) !== null;
 }
 
 function match_order_number(array $order, string $searchNormalized): bool
@@ -209,11 +237,18 @@ function match_order_number(array $order, string $searchNormalized): bool
         $candidates[] = (string)$order['id'];
     }
 
+    $searchDigits = ltrim($searchNormalized, '0');
+
     foreach ($candidates as $candidate) {
         $candidateUp   = mb_strtoupper($candidate);
         $candidateBase = ltrim($candidateUp, 'A');
 
         if ($candidateUp === $searchNormalized || $candidateBase === $searchNormalized) {
+            return true;
+        }
+
+        // Clients drop leading zeros («25121» for A025121) — compare numerically.
+        if ($searchDigits !== '' && ctype_digit($candidateBase) && ltrim($candidateBase, '0') === $searchDigits) {
             return true;
         }
     }
@@ -347,7 +382,9 @@ function lookup_order_by_number(string $number): array
         return ['ok' => false, 'http_code' => 400, 'order' => null];
     }
 
-    $searchNormalized = normalize_order_number($number);
+    // Free-form input («А025121 от 20 07.2026») reaches this both from the
+    // mini-app form and from bot messages — pull the number out first.
+    $searchNormalized = extract_order_number($number) ?? normalize_order_number($number);
 
     $token = livesklad_auth();
     if ($token === null) {
@@ -433,15 +470,27 @@ function handle_order_lookup(string $number)
 
 // --- MAX Bot API (outgoing) -------------------------------------------------
 
-const MAX_BOT_API_BASE = 'https://platform-api2.max.ru';
-const MAX_MINIAPP_URL  = 'https://instrumentburg.ru/max-app/';
+const MAX_BOT_API_BASE      = 'https://platform-api2.max.ru';
+const MAX_MINIAPP_URL       = 'https://instrumentburg.ru/max-app/';
+const MAX_MINIAPP_DEEPLINK  = 'https://max.ru/id662337117117_bot?startapp';
 
-function max_open_app_button(string $text): array
+/**
+ * Button that opens the mini-app.
+ *
+ * NOT type=open_app: that button takes `web_app` as a URL string which MAX
+ * resolves against its own registry of linked mini-apps, and our URL is not in
+ * it — MAX answers the whole POST /messages with
+ * 404 {"code":"not.found", … LinkPK{name='https://instrumentburg.ru/max-app/'}}
+ * so the client gets no reply at all (broken 23.07–24.07.2026).
+ * A plain `link` button on the `?startapp` deeplink opens the same mini-app
+ * inside MAX and is accepted by the API.
+ */
+function max_miniapp_button(string $text): array
 {
     return [
-        'type'    => 'open_app',
-        'text'    => $text,
-        'web_app' => MAX_MINIAPP_URL,
+        'type' => 'link',
+        'text' => $text,
+        'url'  => MAX_MINIAPP_DEEPLINK,
     ];
 }
 
@@ -498,6 +547,34 @@ function max_send_message(int $userId, string $text, array $buttonRows): void
 
 // --- Bot webhook (incoming) -------------------------------------------------
 
+/**
+ * Status reply for a found order: the status line first, then whatever detail
+ * LiveSklad actually has — clients ask «что с моей пилой», not just «какой этап».
+ */
+function format_order_reply(array $formatted): string
+{
+    $lines = ["Заказ {$formatted['order_number']} — статус: «{$formatted['status_label']}»."];
+
+    if (!empty($formatted['device_name'])) {
+        $lines[] = "Инструмент: {$formatted['device_name']}";
+    }
+    if (!empty($formatted['date_received'])) {
+        $date = date('d.m.Y', strtotime((string)$formatted['date_received']));
+        if ($date !== '01.01.1970') {
+            $lines[] = "Принят: {$date}";
+        }
+    }
+    if (!empty($formatted['estimated_cost'])) {
+        $cost = number_format((float)$formatted['estimated_cost'], 0, ',', ' ');
+        $lines[] = "Сумма по заказу: {$cost} ₽";
+    }
+    if (!empty($formatted['master_comment'])) {
+        $lines[] = "Мастер: {$formatted['master_comment']}";
+    }
+
+    return implode("\n", $lines);
+}
+
 function respond_to_order_query(int $userId, string $rawText): void
 {
     $trimmed = trim($rawText);
@@ -506,19 +583,19 @@ function respond_to_order_query(int $userId, string $rawText): void
         $result = lookup_order_by_number($trimmed);
 
         if ($result['ok']) {
-            $formatted = format_order($result['order']);
             max_send_message(
                 $userId,
-                "Заказ {$formatted['order_number']} — статус: «{$formatted['status_label']}».",
-                [[max_open_app_button('Подробнее в мини-приложении')]]
+                format_order_reply(format_order($result['order'])),
+                [[max_miniapp_button('Подробнее в мини-приложении')]]
             );
             return;
         }
 
+        $shown = extract_order_number($trimmed) ?? $trimmed;
         max_send_message(
             $userId,
-            "Не нашли заказ с номером {$trimmed}. Сверьте номер в квитанции или позвоните: +7 (343) 226-44-43 (ежедневно 9:00–18:00).",
-            [[max_open_app_button('Открыть проверку статуса')]]
+            "Не нашли заказ с номером {$shown}. Сверьте номер в квитанции или позвоните: +7 (343) 226-44-43 (ежедневно 9:00–18:00).",
+            [[max_miniapp_button('Открыть проверку статуса')]]
         );
         return;
     }
@@ -526,15 +603,25 @@ function respond_to_order_query(int $userId, string $rawText): void
     max_send_message(
         $userId,
         'Здравствуйте! Это бот ИнструментБург. Пришлите номер заказа из квитанции (например, A023222) — покажем статус ремонта.',
-        [[max_open_app_button('Проверить статус')]]
+        [[max_miniapp_button('Проверить статус')]]
     );
 }
 
 function process_bot_update(array $update): void
 {
     $updateType = (string)($update['update_type'] ?? '');
+
+    // bot_started carries the user at the top level, not inside a message.
+    if ($updateType === 'bot_started') {
+        $userId = $update['user_id'] ?? ($update['user']['user_id'] ?? null);
+        if ($userId !== null && is_numeric($userId)) {
+            respond_to_order_query((int)$userId, '');
+        }
+        return;
+    }
+
     if ($updateType !== 'message_created') {
-        // bot_started, message_callback, etc. are outside this webhook's scope.
+        // message_callback, message_edited, etc. are outside this webhook's scope.
         return;
     }
 
