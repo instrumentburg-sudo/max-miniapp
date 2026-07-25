@@ -1,6 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { hapticTap, hapticSuccess, hapticError } from '../bridge';
 import { ApiError, fetchOrderStatus, type OrderStatus as OrderStatusType } from '../api';
+import { Screen } from '../components/Screen';
+import { TicketRow } from '../components/Ticket';
+import { IconPhone } from '../components/icons';
 
 const STATUS_LABELS: Record<string, string> = {
   received: 'Принят',
@@ -53,17 +56,15 @@ export function OrderStatus() {
     new Intl.NumberFormat('ru-RU').format(price) + ' ₽';
 
   return (
-    <div className="page-enter">
-      <h1 className="page-header">Статус заказа</h1>
-
-      <form className="order-page__form" onSubmit={handleSubmit}>
-        <div className="input-group">
-          <label className="input-group__label" htmlFor="order-num">
+    <Screen eyebrow="Проверка по квитанции" title="Статус заказа">
+      <form className="lookup" onSubmit={handleSubmit}>
+        <div className="field">
+          <label className="field__label" htmlFor="order-num">
             Номер заказа
           </label>
           <input
             id="order-num"
-            className="input-group__field"
+            className="field__input field__input--code"
             type="text"
             placeholder="A023222"
             value={orderNumber}
@@ -83,60 +84,57 @@ export function OrderStatus() {
       </form>
 
       {error && (
-        <div className="order-page__result">
-          <div className="alert alert--error">{error}</div>
+        <div className="lookup__result">
+          <div className="note note--error">
+            <span className="note__head">Не получилось</span>
+            {error}
+          </div>
         </div>
       )}
 
       {order && (
-        <div className="order-page__result">
-          <div className="status-card">
-            <div className="status-card__header">
-              <span className="status-card__order-num">#{order.order_number}</span>
-              <span className={`badge badge--${order.status}`}>
+        <div className="lookup__result">
+          <div className="ticket">
+            <div className="ticket__head">
+              <span>
+                <span className="ticket__kind">Заказ-наряд</span>
+                <span className="ticket__num">{order.order_number}</span>
+              </span>
+              <span className={`stamp stamp--${order.status}`}>
                 {STATUS_LABELS[order.status] ?? order.status_label}
               </span>
             </div>
 
-            <div className="status-card__body">
-              <div className="status-card__row">
-                <span className="status-card__label">Принят</span>
-                <span className="status-card__value">{order.date_received}</span>
-              </div>
-
-              <div className="status-card__row">
-                <span className="status-card__label">Устройство</span>
-                <span className="status-card__value">{order.device_name}</span>
-              </div>
-
+            <div className="ticket__body">
+              <TicketRow label="Принят">{order.date_received}</TicketRow>
+              <TicketRow label="Инструмент">{order.device_name}</TicketRow>
               {order.estimated_cost != null && (
-                <div className="status-card__row">
-                  <span className="status-card__label">Стоимость</span>
-                  <span className="status-card__value status-card__value--price">
-                    {formatPrice(order.estimated_cost)}
-                  </span>
-                </div>
+                <TicketRow label="Стоимость" price>
+                  {formatPrice(order.estimated_cost)}
+                </TicketRow>
               )}
 
               {order.master_comment && (
-                <div className="status-card__comment">
-                  💬 {order.master_comment}
+                <div className="ticket__note">
+                  <span className="ticket__note-title">Комментарий мастера</span>
+                  {order.master_comment}
                 </div>
               )}
             </div>
 
-            <div className="status-card__footer">
+            <div className="ticket__foot">
               <a href="tel:+73432264443" className="btn btn--ghost btn--sm">
-                📞 Позвонить
+                <IconPhone size={15} className="btn__icon" />
+                Позвонить в сервис
               </a>
             </div>
           </div>
         </div>
       )}
 
-      <p className="order-page__hint">
-        Номер заказа указан в квитанции, которую вы получили при сдаче инструмента
+      <p className="hint">
+        Номер заказа указан в квитанции, которую вы получили при сдаче инструмента.
       </p>
-    </div>
+    </Screen>
   );
 }

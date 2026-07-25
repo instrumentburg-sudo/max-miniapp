@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { hapticError, hapticTap, hasInitData, openExternal } from '../bridge';
 import { ApiError, fetchMyOrders, NetworkError, type ClientOrder } from '../api';
+import { Screen } from '../components/Screen';
+import { TicketRow } from '../components/Ticket';
 
 function formatSum(sum: number | null): string | null {
   if (sum === null || !Number.isFinite(sum) || sum <= 0) return null;
@@ -15,37 +17,67 @@ function formatDeadline(deadline: string | null): string | null {
   return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(date);
 }
 
-function OrderCard({ order }: { order: ClientOrder }) {
+function OrderTicket({ order, onOpen }: { order: ClientOrder; onOpen: (number: string) => void }) {
   const sum = formatSum(order.sum);
   // Срок показываем только у аренды: у ремонта deadline — внутренний план работ,
   // клиенту он ничего не обещает.
   const deadline = order.kind === 'rental' ? formatDeadline(order.deadline) : null;
 
   return (
-    <div className="status-card">
-      <div className="status-card__header">
-        <span className="status-card__order-num">{order.number}</span>
-        {order.status && <span className="badge">{order.status}</span>}
+    <article className="ticket ticket--open" onClick={() => onOpen(order.number)}>
+      <div className="ticket__head">
+        <span>
+          <span className="ticket__kind">{order.kind === 'rental' ? 'Аренда' : 'Заказ-наряд'}</span>
+          <span className="ticket__num">{order.number}</span>
+        </span>
+        {order.status && <span className="stamp">{order.status}</span>}
       </div>
-      <div className="status-card__body">
-        <div className="status-card__row">
-          <span className="status-card__label">Инструмент</span>
-          <span className="status-card__value">{order.title}</span>
-        </div>
-        {deadline && (
-          <div className="status-card__row">
-            <span className="status-card__label">Вернуть до</span>
-            <span className="status-card__value">{deadline}</span>
-          </div>
-        )}
+      <div className="ticket__body">
+        <TicketRow label="Инструмент">{order.title}</TicketRow>
+        {deadline && <TicketRow label="Вернуть до">{deadline}</TicketRow>}
         {sum && (
-          <div className="status-card__row">
-            <span className="status-card__label">Сумма</span>
-            <span className="status-card__value status-card__value--price">{sum}</span>
-          </div>
+          <TicketRow label="Сумма" price>
+            {sum}
+          </TicketRow>
         )}
       </div>
+      <div className="ticket__more">Открыть заказ</div>
+    </article>
+  );
+}
+
+function TicketSkeleton() {
+  return (
+    <div className="skeleton-ticket">
+      <div className="skeleton-ticket__head skeleton" />
+      <div className="skeleton-ticket__line skeleton skeleton-ticket__line--mid" />
+      <div className="skeleton-ticket__line skeleton skeleton-ticket__line--short" />
     </div>
+  );
+}
+
+function Section({
+  title,
+  orders,
+  onOpen,
+}: {
+  title: string;
+  orders: ClientOrder[];
+  onOpen: (number: string) => void;
+}) {
+  return (
+    <section className="section">
+      <div className="section__head">
+        <h2 className="section__title">{title}</h2>
+        <span className="section__line" />
+        <span className="section__count">{String(orders.length).padStart(2, '0')}</span>
+      </div>
+      <div className="section__list">
+        {orders.map((order) => (
+          <OrderTicket key={order.number} order={order} onOpen={onOpen} />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -108,36 +140,47 @@ export function MyOrders() {
 
   if (loading) {
     return (
-      <div className="page-enter">
-        <h1 className="page-header">Мои заказы</h1>
-        <p className="orders-page__hint">Загружаем…</p>
-      </div>
+      <Screen eyebrow="Личный кабинет" title="Мои заказы">
+        <div className="section__list">
+          <TicketSkeleton />
+          <TicketSkeleton />
+        </div>
+      </Screen>
     );
   }
 
   if (error) {
     return (
-      <div className="page-enter">
-        <h1 className="page-header">Мои заказы</h1>
-        <div className="alert alert--error">{error}</div>
-        <button className="btn btn--primary link-page__cta" onClick={retry}>
-          Повторить
-        </button>
-      </div>
+      <Screen eyebrow="Личный кабинет" title="Мои заказы">
+        <div className="link__stack">
+          <div className="note note--error">
+            <span className="note__head">Не получилось</span>
+            {error}
+          </div>
+          <button className="btn btn--primary" onClick={retry}>
+            Повторить
+          </button>
+        </div>
+      </Screen>
     );
   }
 
   const repairs = orders?.filter((o) => o.kind === 'repair') ?? [];
   const rentals = orders?.filter((o) => o.kind === 'rental') ?? [];
 
-  return (
-    <div className="page-enter">
-      <h1 className="page-header">Мои заказы</h1>
+  const openOrder = (orderNumber: string) => {
+    hapticTap();
+    navigate(`/orders/${encodeURIComponent(orderNumber)}`);
+  };
 
+  return (
+    <Screen eyebrow="Личный кабинет" title="Мои заказы">
       {repairs.length === 0 && rentals.length === 0 && (
-        <>
-          <p className="orders-page__hint">
-            На вашем номере пока нет заказов в сервисе.
+        <div className="empty">
+          <div className="empty__mark">00</div>
+          <p className="empty__text">
+            На вашем номере пока нет заказов в сервисе. Как только сдадите инструмент
+            или возьмёте технику в аренду — талон появится здесь.
           </p>
           <button
             className="btn btn--ghost"
@@ -145,26 +188,11 @@ export function MyOrders() {
           >
             Каталог аренды на сайте
           </button>
-        </>
+        </div>
       )}
 
-      {repairs.length > 0 && (
-        <section className="orders-page__section">
-          <h2 className="orders-page__section-title">Ремонт</h2>
-          {repairs.map((order) => (
-            <OrderCard key={order.number} order={order} />
-          ))}
-        </section>
-      )}
-
-      {rentals.length > 0 && (
-        <section className="orders-page__section">
-          <h2 className="orders-page__section-title">Аренда</h2>
-          {rentals.map((order) => (
-            <OrderCard key={order.number} order={order} />
-          ))}
-        </section>
-      )}
-    </div>
+      {repairs.length > 0 && <Section title="Ремонт" orders={repairs} onOpen={openOrder} />}
+      {rentals.length > 0 && <Section title="Аренда" orders={rentals} onOpen={openOrder} />}
+    </Screen>
   );
 }

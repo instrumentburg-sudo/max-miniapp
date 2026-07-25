@@ -35,11 +35,12 @@ cd api && python main.py   # FastAPI (port 8100)
 
 | Path | Purpose |
 |------|---------|
-| `src/pages/` | React-страницы: Home, OrderStatus, Catalog, CatalogCategory, RepairRequest |
+| `src/pages/` | React-страницы: Home, OrderStatus, MyOrders, LinkAccount, RepairRequest |
 | `src/bridge.ts` | Typed wrapper для MAX `window.WebApp` (initData, haptics, BackButton) |
 | `src/api.ts` | Fetch-клиент с `X-Init-Data` header |
-| `src/data/catalog.ts` | Статичные данные каталога аренды (9 категорий) |
-| `src/styles/` | CSS: global (variables, reset), components, pages |
+| `src/components/` | `Screen` (шапка экрана), `Ticket` (строка талона), `icons.tsx` (штриховые SVG) |
+| `src/data/instrumentTypes.ts` | Список типов инструмента для формы заявки |
+| `src/styles/` | CSS: global (токены, зерно бумаги), components (талон, штамп, кнопки, поля), pages (раскладки) |
 | `api-php/index.php` | Production PHP API: `/health`, `/order/{number}`, `/repair`, `/bot/webhook`; место для MAX service notifications |
 | `api-php/max-ru-ca.pem` | Корневой сертификат Минцифры — нужен `CURLOPT_CAINFO` для запросов к `platform-api2.max.ru` (не в системном trust store) |
 | `api/main.py` | Legacy/reference FastAPI backend; не production по текущему deploy-плану |
@@ -48,7 +49,7 @@ cd api && python main.py   # FastAPI (port 8100)
 
 ## Key Patterns
 
-**Aesthetic**: "Digital Workshop" — тёмный фон (#111), amber акценты (#F59E0B), Bebas Neue + DM Sans.
+**Aesthetic**: «Приёмный талон» (редизайн 25.07.2026) — светлая бумага (#E9E3D6), типографская краска (#17150F), сигнальный оранжевый (#E33B00). Шрифты: Alumni Sans (дисплей), Golos Text (текст), Martian Mono (маркировка, номера, кнопки). Прямые углы, жёсткие тени без блюра, пунктирные выноски в талоне, штамп статуса под наклоном, перфорация под шапкой. Эмодзи в интерфейсе запрещены — только штриховые SVG из `src/components/icons.tsx` (эмодзи рендерятся системным набором платформы и разъезжаются между iOS/Android/desktop). Статусы LiveSklad приходят свободным текстом и садятся на базовый `.stamp`, поэтому он обязан читаться на чёрной шапке талона без модификатора.
 
 **MAX Bridge**: `bridge.ts` экспортирует typed helpers (`getUser()`, `hapticTap()`, `signalReady()`). WebApp может быть `undefined` вне MAX.
 

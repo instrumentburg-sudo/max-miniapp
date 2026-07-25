@@ -2,27 +2,64 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#141414" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#E9E3D6" />
     <title>ИнструментБург</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Alumni+Sans:wght@700;800&family=Golos+Text:wght@400;500;600;700&family=Martian+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
     <script src="https://st.max.ru/js/max-web-app.js"></script>
     <style>
-      body { margin: 0; background: #141414; color: #fff; font-family: 'DM Sans', sans-serif; }
-      #loading { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 12px; }
-      #loading .spinner { width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.2); border-top-color: #F59E0B; border-radius: 50%; animation: spin 0.8s linear infinite; }
+      body {
+        margin: 0;
+        background: #E9E3D6;
+        color: #17150F;
+        font-family: 'Golos Text', system-ui, sans-serif;
+      }
+      #loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        gap: 18px;
+      }
+      #loading .mark {
+        width: 34px;
+        height: 34px;
+        border: 2px solid #17150F;
+        border-top-color: #E33B00;
+        border-radius: 50%;
+        animation: spin 0.9s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+      }
       @keyframes spin { to { transform: rotate(360deg); } }
-      #loading .text { font-size: 14px; opacity: 0.6; }
-      #error-box { display: none; padding: 20px; margin: 20px; background: #2a1a1a; border: 1px solid #f44; border-radius: 12px; font-size: 13px; word-break: break-all; }
+      #loading .text {
+        font-family: 'Martian Mono', ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: #6E685B;
+      }
+      #error-box {
+        display: none;
+        padding: 14px 16px;
+        margin: 16px;
+        background: #F4F0E6;
+        border: 1px solid #A81C12;
+        border-left-width: 4px;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        line-height: 1.5;
+        color: #A81C12;
+        word-break: break-all;
+      }
     </style>
   </head>
   <body>
     <div id="root">
       <div id="loading">
-        <div class="spinner"></div>
-        <div class="text">Загрузка...</div>
+        <div class="mark"></div>
+        <div class="text">Загрузка</div>
       </div>
     </div>
     <div id="error-box"></div>

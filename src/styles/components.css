@@ -1,336 +1,391 @@
 /* ═══════════════════════════════════════════════
-   Components — Digital Workshop Design System
+   Компоненты — «Приёмный талон»
+   Прямые углы, типографские линейки, жёсткие тени.
    ═══════════════════════════════════════════════ */
 
-/* ── Card ── */
-.card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-lg);
-  transition: border-color 0.15s, transform 0.1s;
-}
-
-.card--interactive {
-  cursor: pointer;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.card--interactive:active {
-  transform: scale(0.97);
-  border-color: var(--border-focus);
-}
-
-.card__icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-md);
-  background: var(--amber-soft);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  margin-bottom: var(--space-md);
-  flex-shrink: 0;
-}
-
-.card__title {
-  font-family: var(--font-display);
-  font-size: 22px;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--text-1);
-  margin-bottom: var(--space-xs);
-}
-
-.card__subtitle {
-  font-size: 14px;
-  color: var(--text-2);
-  line-height: 1.4;
-}
-
-/* ── Button ── */
+/* ── Кнопки ───────────────────────────────────── */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-sm);
-  font-family: var(--font-body);
-  font-size: 15px;
-  font-weight: 600;
-  padding: 14px var(--space-lg);
-  border: none;
-  border-radius: var(--radius-md);
+  gap: 10px;
+  width: 100%;
+  padding: 16px 20px;
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--paper-hi);
+  font-family: var(--f-mono);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: background 0.15s, transform 0.1s, opacity 0.15s;
   user-select: none;
   -webkit-user-select: none;
-  width: 100%;
-  text-align: center;
-}
-
-.btn:active {
-  transform: scale(0.97);
-}
-
-.btn:disabled {
-  opacity: 0.4;
-  pointer-events: none;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.12s ease, color 0.12s ease;
 }
 
 .btn--primary {
-  background: var(--amber);
-  color: var(--text-on-amber);
+  box-shadow: 5px 5px 0 var(--signal);
 }
 
 .btn--primary:active {
-  background: var(--amber-hover);
+  transform: translate(4px, 4px);
+  box-shadow: 1px 1px 0 var(--signal);
 }
 
 .btn--ghost {
   background: transparent;
-  color: var(--amber);
-  border: 1px solid var(--border);
+  color: var(--ink);
+  box-shadow: none;
 }
 
 .btn--ghost:active {
-  background: var(--amber-soft);
-}
-
-.btn--danger {
-  background: var(--danger);
-  color: white;
+  background: var(--ink);
+  color: var(--paper-hi);
 }
 
 .btn--sm {
-  padding: 10px var(--space-md);
-  font-size: 14px;
-  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+
+.btn:disabled {
+  border-color: var(--rule);
+  background: transparent;
+  color: var(--ink-mute);
+  box-shadow: none;
+  pointer-events: none;
 }
 
 .btn--loading {
   position: relative;
-  color: transparent;
+  color: transparent !important;
 }
 
 .btn--loading::after {
   content: '';
   position: absolute;
-  width: 20px;
-  height: 20px;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--paper-hi);
+  border-top-color: var(--signal);
   border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  animation: spin 0.7s linear infinite;
 }
 
-.btn--primary.btn--loading::after {
-  border-color: var(--text-on-amber);
-  border-right-color: transparent;
+.btn--ghost.btn--loading::after {
+  border-color: var(--ink);
+  border-top-color: var(--signal);
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Input ── */
-.input-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.input-group__label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.input-group__field {
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 14px var(--space-md);
-  font-family: var(--font-body);
-  font-size: 16px;
-  color: var(--text-1);
-  outline: none;
-  transition: border-color 0.15s;
-  width: 100%;
-  -webkit-appearance: none;
-}
-
-.input-group__field::placeholder {
-  color: var(--text-3);
-}
-
-.input-group__field:focus {
-  border-color: var(--amber);
-}
-
-textarea.input-group__field {
-  resize: vertical;
-  min-height: 100px;
-  line-height: 1.5;
-}
-
-select.input-group__field {
-  cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23A3A3A3' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 16px center;
-  padding-right: 40px;
-}
-
-/* ── Badge ── */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: var(--radius-full);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  /* Статусы LiveSklad приходят строкой и не мапятся в модификатор — базовый
-     вид должен быть читаемым сам по себе. */
-  background: var(--bg-elevated);
-  color: var(--text-2);
-}
-
-.badge::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.btn__icon {
   flex-shrink: 0;
-  background: var(--text-3);
 }
 
-.badge--received {
-  background: var(--info-soft);
-  color: var(--info);
-}
-.badge--received::before { background: var(--info); }
-
-.badge--diagnosing,
-.badge--in_progress {
-  background: var(--warning-soft);
-  color: var(--warning);
-}
-.badge--diagnosing::before,
-.badge--in_progress::before { background: var(--warning); }
-
-.badge--waiting_parts {
-  background: var(--amber-soft);
-  color: var(--amber);
-}
-.badge--waiting_parts::before { background: var(--amber); }
-
-.badge--ready,
-.badge--completed {
-  background: var(--success-soft);
-  color: var(--success);
-}
-.badge--ready::before,
-.badge--completed::before { background: var(--success); }
-
-/* ── Status Card ── */
-.status-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+/* ── Поля формы ───────────────────────────────── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
 }
 
-.status-card__header {
-  padding: var(--space-lg);
+.field__label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--f-mono);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.field__label::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--signal);
+  flex-shrink: 0;
+  transform: translateY(-1px);
+}
+
+.field__input {
+  width: 100%;
+  padding: 13px 14px;
+  background: var(--paper-hi);
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  font-family: var(--f-body);
+  font-size: 16px;
+  color: var(--ink);
+  outline: none;
+  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.field__input::placeholder {
+  color: var(--ink-mute);
+  opacity: 0.65;
+}
+
+.field__input:focus {
+  border-color: var(--signal);
+  box-shadow: 3px 3px 0 var(--signal);
+}
+
+.field__input--code {
+  font-family: var(--f-mono);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 16px 14px;
+  text-align: center;
+}
+
+textarea.field__input {
+  resize: vertical;
+  min-height: 104px;
+  line-height: 1.5;
+}
+
+select.field__input {
+  cursor: pointer;
+  padding-right: 38px;
+  background-image: url("data:image/svg+xml,%3Csvg width='13' height='8' viewBox='0 0 13 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6.5 6.5L12 1' stroke='%2317150F' stroke-width='2'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+}
+
+/* ── Штамп статуса ────────────────────────────── */
+.stamp {
+  display: inline-block;
+  flex-shrink: 0;
+  padding: 5px 9px;
+  border: 2px solid currentColor;
+  font-family: var(--f-mono);
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  text-align: center;
+  max-width: 44%;
+  color: var(--ink-soft);
+  background: rgba(23, 21, 15, 0.05);
+  transform: rotate(-5deg);
+  animation: stampIn 0.34s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+.stamp--received,
+.stamp--new {
+  color: var(--stamp-blue);
+  background: var(--stamp-blue-wash);
+}
+
+.stamp--diagnosing,
+.stamp--in_progress {
+  color: var(--stamp-amber);
+  background: var(--stamp-amber-wash);
+}
+
+.stamp--waiting_parts {
+  color: var(--signal-deep);
+  background: var(--signal-wash);
+}
+
+.stamp--ready,
+.stamp--completed {
+  color: var(--stamp-green);
+  background: var(--stamp-green-wash);
+}
+
+/* На чёрной шапке талона краска светлая: статусы LiveSklad приходят
+   свободным текстом и часто садятся на базовый .stamp — он обязан
+   читаться сам по себе, без модификатора. */
+.ticket__head .stamp {
+  color: var(--paper-hi);
+  background: rgba(245, 241, 231, 0.07);
+}
+
+.ticket__head .stamp--received,
+.ticket__head .stamp--new {
+  color: #7FB2EE;
+}
+
+.ticket__head .stamp--diagnosing,
+.ticket__head .stamp--in_progress {
+  color: #E5AE3D;
+}
+
+.ticket__head .stamp--waiting_parts {
+  color: #FF7A45;
+}
+
+.ticket__head .stamp--ready,
+.ticket__head .stamp--completed {
+  color: #5CCB93;
+}
+
+/* ── Талон ────────────────────────────────────── */
+.ticket {
+  background: var(--paper-hi);
+  border: 1px solid var(--ink);
+  box-shadow: 4px 4px 0 rgba(23, 21, 15, 0.14);
+  animation: riseIn 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ticket__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--border);
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--ink);
+  color: var(--paper-hi);
 }
 
-.status-card__order-num {
-  font-family: var(--font-display);
-  font-size: 20px;
-  letter-spacing: 0.04em;
+.ticket__num {
+  font-family: var(--f-mono);
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
 }
 
-.status-card__body {
-  padding: var(--space-lg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-}
-
-.status-card__row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
-.status-card__label {
-  font-size: 13px;
-  color: var(--text-3);
+.ticket__kind {
+  display: block;
+  font-family: var(--f-mono);
+  font-weight: 500;
+  font-size: 9px;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  color: var(--signal);
+  margin-bottom: 3px;
+}
+.ticket__body {
+  padding: 6px 16px 14px;
 }
 
-.status-card__value {
-  font-size: 15px;
-  color: var(--text-1);
+.ticket__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.ticket__label {
+  flex-shrink: 0;
+  font-family: var(--f-mono);
+  font-weight: 500;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.ticket__leader {
+  flex: 1;
+  min-width: 12px;
+  border-bottom: 1px dotted var(--rule);
+  transform: translateY(-3px);
+}
+
+.ticket__value {
+  flex-shrink: 1;
+  max-width: 62%;
   text-align: right;
-  max-width: 60%;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.3;
 }
 
-.status-card__value--price {
-  font-family: var(--font-display);
-  font-size: 28px;
-  color: var(--amber);
-  letter-spacing: 0.02em;
+.ticket__value--price {
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: 34px;
+  line-height: 0.9;
+  letter-spacing: -0.01em;
+  color: var(--signal);
+  font-variant-numeric: tabular-nums;
 }
 
-.status-card__comment {
-  background: var(--bg-elevated);
-  border-radius: var(--radius-sm);
-  padding: var(--space-md);
-  font-size: 14px;
-  color: var(--text-2);
-  line-height: 1.5;
-  border-left: 3px solid var(--amber);
-}
-
-.status-card__footer {
-  padding: var(--space-md) var(--space-lg) var(--space-lg);
-}
-
-/* ── Alert / Result ── */
-.alert {
-  padding: var(--space-md);
-  border-radius: var(--radius-md);
+.ticket__note {
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: var(--paper);
+  border-left: 3px solid var(--signal);
   font-size: 14px;
   line-height: 1.5;
+  color: var(--ink-soft);
 }
 
-.alert--success {
-  background: var(--success-soft);
-  color: var(--success);
-  border: 1px solid rgba(34, 197, 94, 0.2);
+.ticket__note-title {
+  display: block;
+  font-family: var(--f-mono);
+  font-weight: 500;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin-bottom: 5px;
 }
 
-.alert--error {
-  background: var(--danger-soft);
-  color: var(--danger);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+.ticket__foot {
+  padding: 0 16px 16px;
 }
 
-/* ── Divider ── */
-.divider {
-  height: 1px;
-  background: var(--border);
-  margin: var(--space-lg) 0;
+/* ── Сообщения ────────────────────────────────── */
+.note {
+  padding: 13px 15px;
+  background: var(--paper-hi);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  animation: riseIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+.note--error {
+  border-left-color: var(--stamp-red);
+  color: var(--stamp-red);
+  background: var(--stamp-red-wash);
+}
+
+.note__head {
+  display: block;
+  font-family: var(--f-mono);
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+/* ── Скелетон талона ──────────────────────────── */
+.skeleton-ticket {
+  border: 1px solid var(--rule);
+  background: var(--paper-hi);
+  padding: 0 0 14px;
+}
+
+.skeleton-ticket__head {
+  height: 46px;
+  background: var(--paper-lo);
+}
+
+.skeleton-ticket__line {
+  height: 11px;
+  margin: 14px 16px 0;
+}
+
+.skeleton-ticket__line--short { width: 42%; }
+.skeleton-ticket__line--mid   { width: 68%; }

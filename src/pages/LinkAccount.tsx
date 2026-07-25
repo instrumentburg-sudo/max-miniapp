@@ -9,6 +9,7 @@ import {
   requestContact,
 } from '../bridge';
 import { ApiError, linkMaxContact } from '../api';
+import { Screen } from '../components/Screen';
 
 /**
  * Привязка MAX-аккаунта к клиенту сервиса.
@@ -54,35 +55,43 @@ export function LinkAccount() {
   };
 
   return (
-    <div className="page-enter">
-      <h1 className="page-header">Мои заказы</h1>
-
-      <p className="link-page__lead">
-        Покажем ремонты и аренды, оформленные на ваш номер, и пришлём сюда, когда
-        инструмент будет готов.
+    <Screen eyebrow="Личный кабинет" title="Мои заказы">
+      <p className="link__lead">
+        Покажем ремонты и аренды, оформленные на <b>ваш номер</b>, и пришлём сюда,
+        когда инструмент будет готов.
       </p>
 
-      <button
-        className={`btn btn--primary link-page__cta${loading ? ' btn--loading' : ''}`}
-        onClick={handleLink}
-        disabled={loading || !hasInitData()}
-      >
-        {loading ? 'Привязываем…' : 'Показать мои заказы'}
-      </button>
+      <div className="link__stack">
+        <button
+          className={`btn btn--primary${loading ? ' btn--loading' : ''}`}
+          onClick={handleLink}
+          disabled={loading || !hasInitData()}
+        >
+          {loading ? 'Привязываем' : 'Показать мои заказы'}
+        </button>
 
-      {!hasInitData() && (
-        <div className="alert alert--error">Откройте приложение внутри MAX</div>
-      )}
+        {!hasInitData() && (
+          <div className="note note--error">
+            <span className="note__head">Нет подписи MAX</span>
+            Откройте приложение внутри MAX — здесь мы не можем подтвердить, чей это номер.
+          </div>
+        )}
 
-      {error && <div className="alert alert--error">{error}</div>}
+        {error && (
+          <div className="note note--error">
+            <span className="note__head">Не получилось</span>
+            {error}
+          </div>
+        )}
 
-      <button className="btn btn--ghost link-page__alt" onClick={() => { hapticTap(); navigate('/order'); }}>
-        Проверить по номеру заказа
-      </button>
+        <button className="btn btn--ghost" onClick={() => { hapticTap(); navigate('/order'); }}>
+          Проверить по номеру заказа
+        </button>
+      </div>
 
-      <p className="link-page__note">
-        Номер телефона нужен только для поиска ваших заказов в сервисе.
+      <p className="link__note">
+        Номер телефона нужен только для поиска ваших заказов в сервисе
       </p>
-    </div>
+    </Screen>
   );
 }

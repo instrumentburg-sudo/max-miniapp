@@ -189,3 +189,145 @@ export interface MyOrdersResponse {
 export function fetchMyOrders(): Promise<MyOrdersResponse> {
   return convexPost<MyOrdersResponse>('/api/max/orders', {});
 }
+
+/* ─── Карточка заказа ─── */
+
+export type ClientStage =
+  | 'diagnostics'
+  | 'approval'
+  | 'repair'
+  | 'ready'
+  | 'closed'
+  | 'rejected';
+
+export interface OrderItem {
+  name: string;
+  price: number | null;
+  count: number | null;
+  isWork: boolean;
+}
+
+export interface OrderDetail {
+  number: string;
+  kind: 'repair' | 'rental';
+  title: string;
+  typeDevice: string | null;
+  serial: string | null;
+  status: string | null;
+  stage: ClientStage | null;
+  problem: string[];
+  receivedAt: string | null;
+  deadline: string | null;
+  sum: number | null;
+  masterComment: string | null;
+  items: OrderItem[];
+  /** Публичный токен сметы: вход в /api/order, /api/outcome, /api/pay */
+  estimateToken: string | null;
+}
+
+export interface OrderDetailResponse {
+  linked: boolean;
+  order: OrderDetail | null;
+}
+
+/** Заказ привязанного клиента целиком. 404 — чужой или несуществующий номер. */
+export function fetchOrderDetail(number: string): Promise<OrderDetailResponse> {
+  return convexPost<OrderDetailResponse>('/api/max/order', { number });
+}
+
+/* ─── Смета, согласование, оплата ─── */
+
+// Те же ручки, что у публичной страницы заказа: тексты и суммы приходят с
+// сервера, мини-апп их не пересчитывает — иначе клиент увидит в MAX одну
+// сумму, а по SMS-ссылке другую.
+
+export interface EstimateLine {
+  name: string;
+  price: number;
+}
+
+export interface UpsellOption extends EstimateLine {
+  type: string;
+}
+
+export interface PublicEstimate {
+  order_number: string;
+  tool_name: string;
+  status: string;
+  works: EstimateLine[];
+  parts: EstimateLine[];
+  upsell_options: UpsellOption[];
+  conclusion: string | null;
+  client_summary: string;
+  totals: { worksTotal: number; partsTotal: number; upsellTotal: number; total: number };
+  stimulus: {
+    type: 'discount' | 'gift';
+    discountPercent: number;
+    payable: number;
+    gift: string | null;
+  };
+  settings: { stimulus_threshold: number; discount_percent: number; gift_name: string };
+  page_outcome: 'approved' | 'rejected' | 'callback' | null;
+}
+
+async function convexJson<T>(path: string, init: RequestInit): Promise<T> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${CONVEX_BASE}${path}`, { ...init, signal: controller.signal, cache: 'no-store' });
+  } catch (e) {
+    throw new NetworkError(e);
+  } finally {
+    window.clearTimeout(timer);
+  }
+
+  if (!res.ok) {
+    const text = await res.text();
+    let apiMessage: string | null = null;
+    try {
+      const parsed = JSON.parse(text) as { error?: unknown };
+      if (typeof parsed.error === 'string') apiMessage = parsed.error;
+    } catch {
+      // не JSON — оставляем null
+    }
+    throw new ApiError(res.status, apiMessage);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+/** Смета по публичному токену — ровно то же, что видит страница заказа */
+export function fetchEstimate(token: string): Promise<PublicEstimate> {
+  return convexJson<PublicEstimate>(`/api/order?token=${encodeURIComponent(token)}`, { method: 'GET' });
+}
+
+export type EstimateOutcome = 'approved' | 'rejected' | 'callback';
+
+/** Решение клиента по смете. Ручка идемпотентна, повтор безопасен. */
+export function submitEstimateOutcome(token: string, outcome: EstimateOutcome): Promise<{ ok?: boolean }> {
+  return convexJson<{ ok?: boolean }>('/api/outcome', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, outcome }),
+  });
+}
+
+export interface SbpPayment {
+  sbp_link: string;
+  amount: number;
+}
+
+/**
+ * Ссылка на оплату по СБП. Единственный режим — полная сумма: частичная
+ * оплата на странице заказа была убрана, и бэкенд отвечает
+ * `unsupported_mode` на любой другой mode.
+ */
+export function createSbpPayment(token: string, selectedUpsellIndexes?: number[]): Promise<SbpPayment> {
+  return convexJson<SbpPayment>('/api/pay', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, mode: 'full', selectedUpsellIndexes }),
+  });
+}

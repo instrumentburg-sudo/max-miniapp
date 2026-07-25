@@ -1,72 +1,76 @@
 import { useNavigate } from 'react-router-dom';
 import { getUser, hapticTap, openExternal } from '../bridge';
+import { IconArrow, IconBox, IconCrane, IconPhone, IconPin, IconSearch, IconWrench } from '../components/icons';
+
+const JOBS = [
+  { idx: '01', title: 'Мои заказы', sub: 'Ремонты и аренды на вашем номере', icon: IconBox, to: '/orders' },
+  { idx: '02', title: 'Статус по номеру', sub: 'Если заказ оформлен на другой номер', icon: IconSearch, to: '/order' },
+  { idx: '03', title: 'Каталог аренды', sub: 'Актуальные цены на сайте', icon: IconCrane, to: 'https://instrumentburg.ru/arenda-instrumenta' },
+  { idx: '04', title: 'Запись на ремонт', sub: 'Бесплатная диагностика', icon: IconWrench, to: '/repair' },
+] as const;
 
 export function Home() {
   const navigate = useNavigate();
-  const user = getUser();
-  const firstName = user?.first_name;
-
-  const go = (path: string) => {
-    hapticTap();
-    navigate(path);
-  };
+  const firstName = getUser()?.first_name;
 
   // Каталог живёт на сайте: статика в приложении расходилась с ценами и
   // наличием, а источника остатков нет ни в одном API.
-  const openCatalog = () => {
+  const go = (to: string) => {
     hapticTap();
-    openExternal('https://instrumentburg.ru/arenda-instrumenta');
+    if (to.startsWith('http')) openExternal(to);
+    else navigate(to);
   };
 
   return (
     <div className="page-enter">
-      <div className="home__brand">
-        <span className="home__logo">ИнструментБург</span>
-      </div>
-
-      {firstName ? (
-        <p className="home__greeting">
-          Привет, <strong>{firstName}</strong>!
-        </p>
-      ) : (
-        <p className="home__greeting">Добро пожаловать!</p>
-      )}
-
-      <div className="home__actions stagger">
-        <div className="card card--interactive" onClick={() => go('/orders')}>
-          <div className="card__icon">📦</div>
-          <div className="card__title">Мои заказы</div>
-          <div className="card__subtitle">Ремонты и аренды на вашем номере</div>
+      <header className="masthead">
+        <div className="masthead__kicker">
+          <b>MAX</b> · мини-приложение сервиса
         </div>
-
-        <div className="card card--interactive" onClick={() => go('/order')}>
-          <div className="card__icon">🔎</div>
-          <div className="card__title">Статус по номеру заказа</div>
-          <div className="card__subtitle">Если заказ оформлен на другой номер</div>
+        <div className="masthead__word">
+          Инструмент<span>бург</span>
         </div>
-
-        <div className="card card--interactive" onClick={openCatalog}>
-          <div className="card__icon">🏗️</div>
-          <div className="card__title">Каталог аренды</div>
-          <div className="card__subtitle">Актуальные цены на сайте</div>
+        <div className="masthead__meta">
+          <i />
+          Ремонт
+          <i />
+          Аренда
+          <i />
+          Екатеринбург
         </div>
+      </header>
 
-        <div className="card card--interactive" onClick={() => go('/repair')}>
-          <div className="card__icon">🔧</div>
-          <div className="card__title">Запись на ремонт</div>
-          <div className="card__subtitle">Бесплатная диагностика</div>
-        </div>
-      </div>
+      <p className="screen__eyebrow" style={{ marginBottom: 14 }}>
+        <i />
+        {firstName ? `Клиент: ${firstName}` : 'Гостевой вход'}
+      </p>
 
-      <footer className="home__footer">
-        <div className="home__footer-row">
-          <span>📍</span>
+      <nav className="jobs stagger">
+        {JOBS.map(({ idx, title, sub, icon: Icon, to }) => (
+          <button key={idx} type="button" className="job" onClick={() => go(to)}>
+            <span className="job__idx">
+              {idx}
+              <Icon size={18} style={{ display: 'block', marginTop: 6, opacity: 0.85 }} />
+            </span>
+            <span>
+              <span className="job__title">{title}</span>
+              <span className="job__sub">{sub}</span>
+            </span>
+            <IconArrow size={20} className="job__arrow" />
+          </button>
+        ))}
+      </nav>
+
+      <footer className="colophon">
+        <div className="colophon__row">
+          <IconPin size={18} />
           <span>ул. 40-летия Комсомола, 2а</span>
         </div>
-        <div className="home__footer-row">
-          <span>📞</span>
+        <div className="colophon__row">
+          <IconPhone size={18} />
           <a href="tel:+73432264443">+7 (343) 226-44-43</a>
         </div>
+        <div className="colophon__stamp">Пн–Пт 9:00–18:00 · Сб 10:00–15:00</div>
       </footer>
     </div>
   );

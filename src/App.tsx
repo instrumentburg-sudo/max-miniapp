@@ -6,6 +6,7 @@ import { OrderStatus } from './pages/OrderStatus';
 import { LinkAccount } from './pages/LinkAccount';
 import { MyOrders } from './pages/MyOrders';
 import { RepairRequest } from './pages/RepairRequest';
+import { OrderCard } from './pages/OrderCard';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -13,12 +14,10 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   render() {
     if (this.state.error) {
       return (
-        <div style={{ padding: 20, color: '#fff', background: '#141414', minHeight: '100vh' }}>
-          <h2 style={{ color: '#F59E0B' }}>Ошибка загрузки</h2>
-          <p>Попробуйте перезапустить приложение</p>
-          <pre style={{ fontSize: 11, opacity: 0.5, wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>
-            {this.state.error.message}
-          </pre>
+        <div className="crash">
+          <div className="crash__title">Сбой</div>
+          <p className="crash__text">Не удалось загрузить приложение. Закройте и откройте его заново.</p>
+          <pre className="crash__trace">{this.state.error.message}</pre>
         </div>
       );
     }
@@ -71,6 +70,7 @@ export function App() {
             <Route path="/order" element={<OrderStatus />} />
             <Route path="/link" element={<LinkAccount />} />
             <Route path="/orders" element={<MyOrders />} />
+            <Route path="/orders/:number" element={<OrderCard />} />
             <Route path="/repair" element={<RepairRequest />} />
           </Routes>
         </div>

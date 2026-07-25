@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { getUser, hapticTap, hapticSuccess, hapticError } from '../bridge';
 import { submitRepairRequest } from '../api';
 import { INSTRUMENT_TYPES } from '../data/instrumentTypes';
+import { Screen } from '../components/Screen';
+import { IconCheck, IconPhone, IconPin, IconShield } from '../components/icons';
 
 export function RepairRequest() {
   const user = getUser();
@@ -51,31 +53,32 @@ export function RepairRequest() {
 
   if (success !== null) {
     return (
-      <div className="success-screen page-enter">
-        <div className="success-screen__icon">✓</div>
-        <div className="success-screen__title">Заявка отправлена!</div>
-        <div className="success-screen__text">
+      <div className="done page-enter">
+        <div className="done__stamp">Принято</div>
+        {success && <div className="done__num">№ {success}</div>}
+        <p className="done__text">
           {success
-            ? `Номер заявки: ${success}. Мы свяжемся с вами в ближайшее время.`
-            : 'Мы свяжемся с вами в ближайшее время для уточнения деталей.'}
+            ? 'Заявка у мастера. Свяжемся с вами в ближайшее время и согласуем время приёмки.'
+            : 'Заявка у мастера. Свяжемся с вами в ближайшее время для уточнения деталей.'}
+        </p>
+        <div className="done__actions">
+          <a href="tel:+73432264443" className="btn btn--ghost btn--sm">
+            <IconPhone size={15} className="btn__icon" />
+            Позвонить нам
+          </a>
         </div>
-        <a href="tel:+73432264443" className="btn btn--ghost" style={{ maxWidth: 240 }}>
-          📞 Позвонить нам
-        </a>
       </div>
     );
   }
 
   return (
-    <div className="page-enter">
-      <h1 className="page-header">Запись на ремонт</h1>
-
-      <form className="repair-page__form" onSubmit={handleSubmit}>
-        <div className="input-group">
-          <label className="input-group__label" htmlFor="r-type">Тип инструмента</label>
+    <Screen eyebrow="Заявка в сервис" title="Запись на ремонт">
+      <form className="form" onSubmit={handleSubmit}>
+        <div className="field">
+          <label className="field__label" htmlFor="r-type">Тип инструмента</label>
           <select
             id="r-type"
-            className="input-group__field"
+            className="field__input"
             value={type}
             onChange={(e) => setType(e.target.value)}
           >
@@ -86,11 +89,11 @@ export function RepairRequest() {
           </select>
         </div>
 
-        <div className="input-group">
-          <label className="input-group__label" htmlFor="r-brand">Марка и модель</label>
+        <div className="field">
+          <label className="field__label" htmlFor="r-brand">Марка и модель</label>
           <input
             id="r-brand"
-            className="input-group__field"
+            className="field__input"
             type="text"
             placeholder="Makita HR2470"
             value={brand}
@@ -99,22 +102,22 @@ export function RepairRequest() {
           />
         </div>
 
-        <div className="input-group">
-          <label className="input-group__label" htmlFor="r-problem">Опишите проблему</label>
+        <div className="field">
+          <label className="field__label" htmlFor="r-problem">Что случилось</label>
           <textarea
             id="r-problem"
-            className="input-group__field"
-            placeholder="Не включается, искрит при работе, посторонний звук..."
+            className="field__input"
+            placeholder="Не включается, искрит при работе, посторонний звук…"
             value={problem}
             onChange={(e) => setProblem(e.target.value)}
           />
         </div>
 
-        <div className="input-group">
-          <label className="input-group__label" htmlFor="r-phone">Ваш телефон</label>
+        <div className="field">
+          <label className="field__label" htmlFor="r-phone">Ваш телефон</label>
           <input
             id="r-phone"
-            className="input-group__field"
+            className="field__input"
             type="tel"
             placeholder="+7 (___) ___-__-__"
             value={phone}
@@ -124,9 +127,14 @@ export function RepairRequest() {
           />
         </div>
 
-        {error && <div className="alert alert--error">{error}</div>}
+        {error && (
+          <div className="note note--error">
+            <span className="note__head">Не отправилось</span>
+            {error}
+          </div>
+        )}
 
-        <div className="repair-page__submit">
+        <div className="form__submit">
           <button
             type="submit"
             className={`btn btn--primary ${loading ? 'btn--loading' : ''}`}
@@ -134,23 +142,23 @@ export function RepairRequest() {
           >
             Отправить заявку
           </button>
-        </div>
 
-        <div className="repair-page__trust">
-          <div className="repair-page__trust-item">
-            <span>✅</span>
-            <span>Диагностика бесплатно</span>
-          </div>
-          <div className="repair-page__trust-item">
-            <span>🛡️</span>
-            <span>Гарантия на ремонт</span>
-          </div>
-          <div className="repair-page__trust-item">
-            <span>📍</span>
-            <span>ул. 40-летия Комсомола, 2а</span>
+          <div className="warranty">
+            <div className="warranty__item">
+              <IconCheck size={17} />
+              <span>Диагностика бесплатно</span>
+            </div>
+            <div className="warranty__item">
+              <IconShield size={17} />
+              <span>Гарантия на ремонт</span>
+            </div>
+            <div className="warranty__item">
+              <IconPin size={17} />
+              <span>ул. 40-летия Комсомола, 2а</span>
+            </div>
           </div>
         </div>
       </form>
-    </div>
+    </Screen>
   );
 }
