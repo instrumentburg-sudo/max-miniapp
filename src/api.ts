@@ -94,12 +94,42 @@ export function submitRepairRequest(data: RepairRequest): Promise<RepairResponse
 // поэтому база отдельная и настраивается через окружение сборки.
 const CONVEX_BASE = import.meta.env.VITE_CONVEX_SITE_URL ?? 'https://proper-wren-188.convex.site';
 
-async function convexPost<T>(path: string, body: Record<string, unknown>): Promise<T> {
-  const res = await fetch(`${CONVEX_BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ initData: getInitData(), ...body }),
-  });
+/** Запрос не дошёл до сервера — сеть, а не отказ бэкенда */
+export class NetworkError extends Error {
+  constructor(readonly cause?: unknown) {
+    super('network');
+    this.name = 'NetworkError';
+  }
+}
+
+// WebView MAX способен потерять запрос молча: после возврата из нативного окна
+// «поделиться номером» POST уходил, но до Convex не доезжал (в логах остался
+// только preflight OPTIONS), и fetch без таймаута висел вечно — экран навсегда
+// застывал на «Загружаем…». Поэтому: жёсткий дедлайн + один автоматический
+// повтор. Обе ручки кабинета идемпотентны (linkContact перезаписывает связку,
+// listOrders только читает), повтор безопасен.
+const REQUEST_TIMEOUT_MS = 15_000;
+
+async function convexPostOnce<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${CONVEX_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: getInitData(), ...body }),
+      signal: controller.signal,
+      // Ответы кабинета персональные: промежуточному кешу их видеть незачем,
+      // а WebView не должен отдать вчерашний список заказов.
+      cache: 'no-store',
+    });
+  } catch (e) {
+    throw new NetworkError(e);
+  } finally {
+    window.clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const text = await res.text();
@@ -114,6 +144,17 @@ async function convexPost<T>(path: string, body: Record<string, unknown>): Promi
   }
 
   return res.json() as Promise<T>;
+}
+
+async function convexPost<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  try {
+    return await convexPostOnce<T>(path, body);
+  } catch (e) {
+    // Повторяем только потерю связи. ApiError — осознанный ответ сервера
+    // (401/400), его повтор ничего не изменит и лишь задержит текст ошибки.
+    if (!(e instanceof NetworkError)) throw e;
+    return await convexPostOnce<T>(path, body);
+  }
 }
 
 export interface LinkContactResponse {

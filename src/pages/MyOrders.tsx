@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { hapticError, hasInitData, openExternal } from '../bridge';
-import { ApiError, fetchMyOrders, type ClientOrder } from '../api';
+import { hapticError, hapticTap, hasInitData, openExternal } from '../bridge';
+import { ApiError, fetchMyOrders, NetworkError, type ClientOrder } from '../api';
 
 function formatSum(sum: number | null): string | null {
   if (sum === null || !Number.isFinite(sum) || sum <= 0) return null;
@@ -54,6 +54,9 @@ export function MyOrders() {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<ClientOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Счётчик перезапускает эффект: WebView MAX умеет терять запрос по дороге,
+  // и без ручного повтора у клиента остаётся только «закрыть и открыть заново».
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +67,9 @@ export function MyOrders() {
       navigate('/link', { replace: true });
       return;
     }
+
+    setLoading(true);
+    setError(null);
 
     fetchMyOrders()
       .then((res) => {
@@ -80,8 +86,10 @@ export function MyOrders() {
         hapticError();
         if (e instanceof ApiError && e.apiMessage === 'invalid_init_data') {
           setError('Сессия устарела. Закройте и откройте мини-приложение заново.');
+        } else if (e instanceof NetworkError) {
+          setError('Нет связи с сервисом. Проверьте интернет и попробуйте ещё раз.');
         } else {
-          setError('Не удалось загрузить заказы. Попробуйте позже.');
+          setError('Не удалось загрузить заказы. Попробуйте ещё раз.');
         }
       })
       .finally(() => {
@@ -91,7 +99,12 @@ export function MyOrders() {
     return () => {
       cancelled = true;
     };
-  }, [navigate]);
+  }, [navigate, attempt]);
+
+  const retry = () => {
+    hapticTap();
+    setAttempt((n) => n + 1);
+  };
 
   if (loading) {
     return (
@@ -107,6 +120,9 @@ export function MyOrders() {
       <div className="page-enter">
         <h1 className="page-header">Мои заказы</h1>
         <div className="alert alert--error">{error}</div>
+        <button className="btn btn--primary link-page__cta" onClick={retry}>
+          Повторить
+        </button>
       </div>
     );
   }
