@@ -219,7 +219,6 @@ export interface OrderDetail {
   receivedAt: string | null;
   deadline: string | null;
   sum: number | null;
-  masterComment: string | null;
   items: OrderItem[];
   /** Публичный токен сметы: вход в /api/order, /api/outcome, /api/pay */
   estimateToken: string | null;

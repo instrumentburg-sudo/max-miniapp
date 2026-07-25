@@ -116,7 +116,10 @@ export function MyOrders() {
       .catch((e: unknown) => {
         if (cancelled) return;
         hapticError();
-        if (e instanceof ApiError && e.apiMessage === 'invalid_init_data') {
+        if (e instanceof ApiError && e.status === 503) {
+          // Сервис учёта занят — это не «заказов нет» и не сломанная сессия.
+          setError(e.apiMessage ?? 'Сервис учёта временно занят. Попробуйте через минуту.');
+        } else if (e instanceof ApiError && e.apiMessage === 'invalid_init_data') {
           setError('Сессия устарела. Закройте и откройте мини-приложение заново.');
         } else if (e instanceof NetworkError) {
           setError('Нет связи с сервисом. Проверьте интернет и попробуйте ещё раз.');

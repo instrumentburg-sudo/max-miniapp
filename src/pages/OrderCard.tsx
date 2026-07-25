@@ -137,6 +137,10 @@ export function OrderCard() {
         hapticError();
         if (e instanceof ApiError && e.status === 404) {
           setError('Заказ не найден среди ваших. Проверьте номер в квитанции.');
+        } else if (e instanceof ApiError && e.status === 503) {
+          // 404 и «сервис учёта занят» — разные истории: во втором случае
+          // клиенту незачем перепроверять номер, надо просто повторить.
+          setError(e.apiMessage ?? 'Сервис учёта временно занят. Попробуйте через минуту.');
         } else if (e instanceof ApiError && e.apiMessage === 'invalid_init_data') {
           setError('Сессия устарела. Закройте и откройте мини-приложение заново.');
         } else if (e instanceof NetworkError) {
@@ -286,10 +290,13 @@ export function OrderCard() {
             </div>
           )}
 
-          {order.masterComment && (
+          {/* Заключение показываем только client-safe — то, что менеджер
+              написал клиенту в смете. Сырой вердикт мастера из LiveSklad
+              бэкенд не отдаёт: там внутренние заметки. */}
+          {estimate?.conclusion && (
             <div className="ticket__note">
-              <span className="ticket__note-title">Заключение мастера</span>
-              {order.masterComment}
+              <span className="ticket__note-title">Заключение по диагностике</span>
+              {estimate.conclusion}
             </div>
           )}
         </div>
@@ -367,13 +374,6 @@ export function OrderCard() {
             <p className="total__note">Скидка {totals.discountPercent}% за оплату онлайн уже учтена</p>
           ) : (
             totals.gift && <p className="total__note">Подарок при оплате онлайн: {totals.gift}</p>
-          )}
-
-          {estimate.conclusion && (
-            <div className="ticket__note">
-              <span className="ticket__note-title">Техническое заключение</span>
-              {estimate.conclusion}
-            </div>
           )}
 
           {actionError && (
