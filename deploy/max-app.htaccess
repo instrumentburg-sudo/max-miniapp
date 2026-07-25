@@ -1,0 +1,28 @@
+# Конфиг Apache для https://instrumentburg.ru/max-app/. Раньше жил ТОЛЬКО на
+# сервере и не был в репозитории: любой, кто разворачивал приложение заново,
+# терял SPA-фолбэк и не знал про политику кеширования. deploy.sh выкладывает
+# этот файл вместе с бандлом.
+
+RewriteEngine On
+RewriteBase /max-app/
+
+# Существующий файл или каталог отдаём как есть
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Остальное — index.html (SPA-фолбэк для /link, /orders, /order)
+RewriteRule ^ index.html [L]
+
+# Кеширование. index.html обязан проверяться на каждый запуск: имена бандлов в
+# нём меняются с каждой сборкой, и если WebView MAX подержит старый html, клиент
+# будет неделями сидеть на прошлой версии приложения и не увидит новых экранов.
+# Ассеты наоборот: имя содержит хеш содержимого, поэтому их можно кешировать
+# навсегда — новая сборка приедет под новым именем.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "\.(js|css|woff2?|png|jpg|jpeg|svg|webp)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>

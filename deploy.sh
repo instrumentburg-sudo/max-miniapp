@@ -19,6 +19,10 @@ if [[ "$mode" == "all" || "$mode" == "--frontend-only" ]]; then
   echo "==> Deploying frontend to $SSH_HOST:$REMOTE_WEB/"
   ssh "$SSH_HOST" "mkdir -p $REMOTE_WEB"
   scp -r dist/* "$SSH_HOST:$REMOTE_WEB/"
+  # .htaccess не попадает в dist (Vite его не собирает) и не матчится dist/*,
+  # поэтому выкладываем отдельно. Без него ломается SPA-фолбэк на /link,
+  # /orders и кеш-политика: index.html залипает в WebView со старым бандлом.
+  scp deploy/max-app.htaccess "$SSH_HOST:$REMOTE_WEB/.htaccess"
   echo "    Frontend deployed."
 fi
 
