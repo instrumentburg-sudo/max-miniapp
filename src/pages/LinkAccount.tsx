@@ -5,7 +5,7 @@ import {
   hapticError,
   hapticSuccess,
   hapticTap,
-  isInMax,
+  hasInitData,
   requestContact,
 } from '../bridge';
 import { ApiError, linkMaxContact } from '../api';
@@ -65,12 +65,12 @@ export function LinkAccount() {
       <button
         className={`btn btn--primary link-page__cta${loading ? ' btn--loading' : ''}`}
         onClick={handleLink}
-        disabled={loading || !isInMax()}
+        disabled={loading || !hasInitData()}
       >
         {loading ? 'Привязываем…' : 'Показать мои заказы'}
       </button>
 
-      {!isInMax() && (
+      {!hasInitData() && (
         <div className="alert alert--error">Откройте приложение внутри MAX</div>
       )}
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { hapticError, openExternal } from '../bridge';
+import { hapticError, hasInitData, openExternal } from '../bridge';
 import { ApiError, fetchMyOrders, type ClientOrder } from '../api';
 
 function formatSum(sum: number | null): string | null {
@@ -57,6 +57,13 @@ export function MyOrders() {
 
   useEffect(() => {
     let cancelled = false;
+
+    // Вне клиента MAX подписанного initData нет, и ручка ответит bad_request.
+    // Ведём на /link — там честно сказано, что нужно открыть приложение в MAX.
+    if (!hasInitData()) {
+      navigate('/link', { replace: true });
+      return;
+    }
 
     fetchMyOrders()
       .then((res) => {

@@ -173,3 +173,14 @@ export async function requestContact(timeoutMs = 60_000): Promise<MaxContact> {
 
   return { phone: res.phone, authDate: res.authDate, hash: res.hash };
 }
+
+/**
+ * Запущены ли мы в реальном клиенте MAX.
+ *
+ * `isInMax()` для этого не годится: библиотека с CDN создаёт `window.WebApp`
+ * в любом браузере, а вот подписанный `initData` появляется только внутри
+ * клиента — без него серверные ручки кабинета всё равно ответят отказом.
+ */
+export function hasInitData(): boolean {
+  return getInitData().length > 0;
+}
