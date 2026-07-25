@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { getUser, hapticTap, hapticSuccess, hapticError } from '../bridge';
 import { submitRepairRequest } from '../api';
-import { INSTRUMENT_TYPES } from '../data/catalog';
+import { INSTRUMENT_TYPES } from '../data/instrumentTypes';
 
 export function RepairRequest() {
   const user = getUser();

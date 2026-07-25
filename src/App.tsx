@@ -3,8 +3,8 @@ import { useEffect, Component, type ReactNode } from 'react';
 import { getWebApp, signalReady } from './bridge';
 import { Home } from './pages/Home';
 import { OrderStatus } from './pages/OrderStatus';
-import { Catalog } from './pages/Catalog';
-import { CatalogCategory } from './pages/CatalogCategory';
+import { LinkAccount } from './pages/LinkAccount';
+import { MyOrders } from './pages/MyOrders';
 import { RepairRequest } from './pages/RepairRequest';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -69,8 +69,8 @@ export function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/order" element={<OrderStatus />} />
-            <Route path="/catalog" element={<Catalog />} />
-            <Route path="/catalog/:categoryId" element={<CatalogCategory />} />
+            <Route path="/link" element={<LinkAccount />} />
+            <Route path="/orders" element={<MyOrders />} />
             <Route path="/repair" element={<RepairRequest />} />
           </Routes>
         </div>

@@ -38,6 +38,18 @@ interface HapticFeedback {
   selectionChanged(): void;
 }
 
+/**
+ * Ответ requestContact(). Клиент MAX резолвит промис либо телефоном с подписью,
+ * либо объектом ошибки — реджект не гарантирован, поэтому разбираем оба поля.
+ * dev.max.ru/docs/webapps/bridge, «Запрос номера телефона».
+ */
+interface ContactResponse {
+  phone?: string;
+  authDate?: string;
+  hash?: string;
+  error?: { code?: string };
+}
+
 interface MaxWebApp {
   initData: string;
   initDataUnsafe: WebAppData;
@@ -51,7 +63,7 @@ interface MaxWebApp {
   openMaxLink(url: string): void;
   enableClosingConfirmation(): void;
   disableClosingConfirmation(): void;
-  requestContact(): void;
+  requestContact(): Promise<ContactResponse>;
   shareContent(text: string, link: string): void;
   onEvent(event: string, callback: () => void): void;
   offEvent(event: string, callback: () => void): void;
@@ -106,4 +118,58 @@ export function openExternal(url: string): void {
 /** Check if running inside MAX */
 export function isInMax(): boolean {
   return !!window.WebApp;
+}
+
+/** Телефон из requestContact() с подписью MAX — то, что ждёт POST /api/max/link */
+export interface MaxContact {
+  phone: string;
+  authDate: string;
+  hash: string;
+}
+
+/** Отказ пользователя — не ошибка приложения, экран остаётся рабочим */
+export class ContactRefused extends Error {
+  constructor() {
+    super('user_refused');
+    this.name = 'ContactRefused';
+  }
+}
+
+/**
+ * Запрашивает телефон через нативное окно MAX.
+ *
+ * Клиент отдаёт `{ error: { code: "client.request_phone.<reason>" } }` вместо
+ * данных, когда пользователь отказался (`user_refused_provide_phone_number`)
+ * или запрос не прошёл (`request_error`). Промис при этом резолвится, так что
+ * проверять надо поля, а не только catch.
+ *
+ * Таймаут обязателен: если клиент MAX не отвечает (в браузере, где библиотека
+ * с CDN подгружена без транспорта, или при обрыве связи с нативной частью),
+ * промис не резолвится вообще и кнопка навсегда залипает в «Привязываем…».
+ */
+export async function requestContact(timeoutMs = 60_000): Promise<MaxContact> {
+  const webapp = getWebApp();
+  if (!webapp) throw new Error('Мини-приложение открыто вне MAX');
+
+  let timer: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error('MAX не ответил на запрос номера. Попробуйте ещё раз')), timeoutMs);
+  });
+
+  let res: ContactResponse;
+  try {
+    res = await Promise.race([webapp.requestContact(), timeout]);
+  } finally {
+    window.clearTimeout(timer);
+  }
+
+  const code = res?.error?.code ?? '';
+  if (code.endsWith('user_refused_provide_phone_number')) throw new ContactRefused();
+  if (code) throw new Error('MAX не смог передать номер. Попробуйте ещё раз');
+
+  if (!res?.phone || !res.authDate || !res.hash) {
+    throw new Error('MAX вернул неполные данные номера');
+  }
+
+  return { phone: res.phone, authDate: res.authDate, hash: res.hash };
 }

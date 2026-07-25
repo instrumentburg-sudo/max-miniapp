@@ -87,3 +87,64 @@ export interface RepairResponse {
 export function submitRepairRequest(data: RepairRequest): Promise<RepairResponse> {
   return apiFetch<RepairResponse>('/repair', { method: 'POST', body: data as unknown as Record<string, unknown> });
 }
+
+/* ─── Клиентский кабинет (Convex) ─── */
+
+// PHP-ручки статуса и заявки остаются на /max-api; кабинет живёт в Convex,
+// поэтому база отдельная и настраивается через окружение сборки.
+const CONVEX_BASE = import.meta.env.VITE_CONVEX_SITE_URL ?? 'https://proper-wren-188.convex.site';
+
+async function convexPost<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${CONVEX_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initData: getInitData(), ...body }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    let apiMessage: string | null = null;
+    try {
+      const parsed = JSON.parse(text) as { error?: unknown };
+      if (typeof parsed.error === 'string') apiMessage = parsed.error;
+    } catch {
+      // не JSON — оставляем null
+    }
+    throw new ApiError(res.status, apiMessage);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+export interface LinkContactResponse {
+  ok: boolean;
+  phone: string;
+}
+
+/** Привязывает MAX-аккаунт к клиенту по телефону из requestContact() */
+export function linkMaxContact(contact: {
+  phone: string;
+  authDate: string;
+  hash: string;
+}): Promise<LinkContactResponse> {
+  return convexPost<LinkContactResponse>('/api/max/link', contact);
+}
+
+export interface ClientOrder {
+  number: string;
+  kind: 'repair' | 'rental';
+  title: string;
+  status: string | null;
+  deadline: string | null;
+  sum: number | null;
+}
+
+export interface MyOrdersResponse {
+  linked: boolean;
+  orders: ClientOrder[];
+}
+
+/** Заказы привязанного клиента: ремонты и аренды одним списком */
+export function fetchMyOrders(): Promise<MyOrdersResponse> {
+  return convexPost<MyOrdersResponse>('/api/max/orders', {});
+}

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { getUser, hapticTap } from '../bridge';
+import { getUser, hapticTap, openExternal } from '../bridge';
 
 export function Home() {
   const navigate = useNavigate();
@@ -9,6 +9,13 @@ export function Home() {
   const go = (path: string) => {
     hapticTap();
     navigate(path);
+  };
+
+  // Каталог живёт на сайте: статика в приложении расходилась с ценами и
+  // наличием, а источника остатков нет ни в одном API.
+  const openCatalog = () => {
+    hapticTap();
+    openExternal('https://instrumentburg.ru/arenda-instrumenta');
   };
 
   return (
@@ -26,16 +33,22 @@ export function Home() {
       )}
 
       <div className="home__actions stagger">
-        <div className="card card--interactive" onClick={() => go('/order')}>
+        <div className="card card--interactive" onClick={() => go('/orders')}>
           <div className="card__icon">📦</div>
-          <div className="card__title">Статус заказа</div>
-          <div className="card__subtitle">Проверить готовность ремонта</div>
+          <div className="card__title">Мои заказы</div>
+          <div className="card__subtitle">Ремонты и аренды на вашем номере</div>
         </div>
 
-        <div className="card card--interactive" onClick={() => go('/catalog')}>
+        <div className="card card--interactive" onClick={() => go('/order')}>
+          <div className="card__icon">🔎</div>
+          <div className="card__title">Статус по номеру заказа</div>
+          <div className="card__subtitle">Если заказ оформлен на другой номер</div>
+        </div>
+
+        <div className="card card--interactive" onClick={openCatalog}>
           <div className="card__icon">🏗️</div>
           <div className="card__title">Каталог аренды</div>
-          <div className="card__subtitle">Оборудование от 250 ₽/сут</div>
+          <div className="card__subtitle">Актуальные цены на сайте</div>
         </div>
 
         <div className="card card--interactive" onClick={() => go('/repair')}>
