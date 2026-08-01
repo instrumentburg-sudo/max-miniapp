@@ -1106,6 +1106,75 @@ function handle_repair()
     ]);
 }
 
+/**
+ * Прокси к Convex (proper-wren-188.convex.site) для ручек клиентского кабинета.
+ *
+ * Зачем: с мобильных операторов РФ прямые запросы к *.convex.site (зарубежный
+ * хостинг) периодически теряются — клиент видел «Нет связи с сервисом», хотя
+ * тот же WebView спокойно грузил instrumentburg.ru. Через свой домен путь
+ * «телефон → NetAngels» стабилен, а «NetAngels → Convex» — датацентровый.
+ * Бонус: same-origin убирает CORS-preflight — вдвое меньше запросов через
+ * мобильную сеть, которую WebView MAX и так умеет терять.
+ *
+ * Белый список путей и методов обязателен: без него это открытый прокси.
+ */
+function handle_convex_proxy(string $upstreamPath): void
+{
+    $allowed = [
+        '/api/max/link'   => 'POST',
+        '/api/max/orders' => 'POST',
+        '/api/max/order'  => 'POST',
+        '/api/order'      => 'GET',
+        '/api/outcome'    => 'POST',
+        '/api/pay'        => 'POST',
+    ];
+    $method = $_SERVER['REQUEST_METHOD'];
+    if (!isset($allowed[$upstreamPath]) || $allowed[$upstreamPath] !== $method) {
+        json_response(['error' => 'Not found'], 404);
+    }
+
+    $url = 'https://proper-wren-188.convex.site' . $upstreamPath;
+    $qs = $_SERVER['QUERY_STRING'] ?? '';
+    if ($qs !== '') {
+        $url .= '?' . $qs;
+    }
+
+    $ch = curl_init($url);
+    $opts = [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        // Клиент ждёт 15 с; даём upstream чуть больше, чтобы ответ, который
+        // почти успел, не обрывался на нашей стороне.
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            'Accept: application/json',
+        ],
+    ];
+    if ($method === 'POST') {
+        $raw = file_get_contents('php://input');
+        $opts[CURLOPT_POST]       = true;
+        $opts[CURLOPT_POSTFIELDS] = ($raw === false || $raw === '') ? '{}' : $raw;
+    }
+    curl_setopt_array($ch, $opts);
+
+    $body = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err  = curl_error($ch);
+    curl_close($ch);
+
+    if ($body === false) {
+        error_log('convex proxy: ' . $err);
+        json_response(['error' => 'upstream_unreachable'], 502);
+    }
+
+    // Статус и тело отдаём как есть: фронт разбирает {error} из ответа Convex.
+    http_response_code($code > 0 ? $code : 502);
+    header('Content-Type: application/json; charset=utf-8');
+    echo $body;
+    exit;
+}
+
 // --- Main ------------------------------------------------------------------
 
 load_env();
@@ -1141,6 +1210,10 @@ if ($method === 'POST' && $path === '/repair') {
     handle_repair();
 }
 
+// Кабинет: /max-api/cvx/api/... → Convex тем же путём и методом.
+if (substr($path, 0, 5) === '/cvx/') {
+    handle_convex_proxy(substr($path, 4));
+}
 if ($method === 'POST' && $path === '/bot/webhook') {
     handle_bot_webhook();
 }

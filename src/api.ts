@@ -90,9 +90,12 @@ export function submitRepairRequest(data: RepairRequest): Promise<RepairResponse
 
 /* ─── Клиентский кабинет (Convex) ─── */
 
-// PHP-ручки статуса и заявки остаются на /max-api; кабинет живёт в Convex,
-// поэтому база отдельная и настраивается через окружение сборки.
-const CONVEX_BASE = import.meta.env.VITE_CONVEX_SITE_URL ?? 'https://proper-wren-188.convex.site';
+// PHP-ручки статуса и заявки остаются на /max-api; кабинет живёт в Convex.
+// По умолчанию ходим НЕ напрямую в *.convex.site, а через PHP-прокси на своём
+// домене (/max-api/cvx): с мобильных операторов РФ прямые запросы к
+// зарубежному convex.site периодически теряются, а same-origin ещё и убирает
+// CORS-preflight. Прямой URL можно вернуть через VITE_CONVEX_SITE_URL.
+const CONVEX_BASE = import.meta.env.VITE_CONVEX_SITE_URL ?? '/max-api/cvx';
 
 /** Запрос не дошёл до сервера — сеть, а не отказ бэкенда */
 export class NetworkError extends Error {
