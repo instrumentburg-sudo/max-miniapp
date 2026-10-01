@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { hapticError, hapticTap, hasInitData } from '../bridge';
 import { ApiError, fetchMyOrders, NetworkError, type ClientOrder } from '../api';
-import { IntakeRequests } from '../components/IntakeRequests';
+import { IntakeRequests, useIntakeRequests } from '../components/IntakeRequests';
+import { LinkAccount } from './LinkAccount';
 import { Screen } from '../components/Screen';
 import { TicketRow } from '../components/Ticket';
 import { stampClass } from '../lib/orderStatus';
@@ -85,6 +86,7 @@ function Section({
 
 export function MyOrders() {
   const navigate = useNavigate();
+  const intakeRequests = useIntakeRequests();
   const [loading, setLoading] = useState(true);
   const [linked, setLinked] = useState(true);
   const [orders, setOrders] = useState<ClientOrder[] | null>(null);
@@ -149,7 +151,7 @@ export function MyOrders() {
   if (loading) {
     return (
       <Screen eyebrow="Личный кабинет" title="Мои заказы">
-        <IntakeRequests />
+        <IntakeRequests items={intakeRequests} />
         <div className="section__list">
           <TicketSkeleton />
           <TicketSkeleton />
@@ -161,7 +163,7 @@ export function MyOrders() {
   if (error) {
     return (
       <Screen eyebrow="Личный кабинет" title="Мои заказы">
-        <IntakeRequests />
+        <IntakeRequests items={intakeRequests} />
         <div className="link__stack">
           <div className="note note--error">
             <span className="note__head">Не получилось</span>
@@ -175,6 +177,10 @@ export function MyOrders() {
     );
   }
 
+  if (!linked && intakeRequests.length === 0) {
+    return <LinkAccount onLinked={() => setAttempt(n => n + 1)} />;
+  }
+
   const repairs = orders?.filter((o) => o.kind === 'repair') ?? [];
   const rentals = orders?.filter((o) => o.kind === 'rental') ?? [];
 
@@ -185,7 +191,7 @@ export function MyOrders() {
 
   return (
     <Screen eyebrow="Личный кабинет" title="Мои заказы">
-        <IntakeRequests />
+        <IntakeRequests items={intakeRequests} />
       {!linked && <button className="btn btn--primary" onClick={() => navigate('/link')}>Подтвердить телефон для заказов</button>}
       {linked && repairs.length === 0 && rentals.length === 0 && (
         <div className="empty">
@@ -196,7 +202,7 @@ export function MyOrders() {
           </p>
           <button
             className="btn btn--ghost"
-            onClick={() => navigate('/catalog')}
+            onClick={() => { hapticTap(); navigate('/catalog'); }}
           >
             Каталог аренды
           </button>

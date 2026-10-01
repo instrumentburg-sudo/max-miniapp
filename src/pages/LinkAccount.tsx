@@ -19,7 +19,7 @@ import { Screen } from '../components/Screen';
  * нельзя. Ручной ввод здесь сознательно не предлагаем — по нему открывалась бы
  * чужая история заказов.
  */
-export function LinkAccount() {
+export function LinkAccount({ onLinked }: { onLinked?: () => void }) {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +35,8 @@ export function LinkAccount() {
       const contact = await requestContact();
       await linkMaxContact(contact);
       hapticSuccess();
-      navigate('/orders', { replace: true });
+      if (onLinked) onLinked();
+      else navigate('/orders', { replace: true });
     } catch (e) {
       hapticError();
       if (e instanceof ContactRefused) {

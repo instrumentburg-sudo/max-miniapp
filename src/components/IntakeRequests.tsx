@@ -25,7 +25,7 @@ function openStatus(value: string) {
   } else openExternal(value);
 }
 
-export function IntakeRequests() {
+export function useIntakeRequests() {
   const [items, setItems] = useState<IntakeRequest[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -38,6 +38,10 @@ export function IntakeRequests() {
     });
     return () => { cancelled = true; };
   }, []);
+  return items;
+}
+
+export function IntakeRequests({ items }: { items: IntakeRequest[] }) {
   if (items.length === 0) return null;
   return <section className="section" aria-label="Предзаявки">
     <div className="section__head"><h2 className="section__title">Предзаявки</h2></div>
