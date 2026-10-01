@@ -184,54 +184,74 @@ select.field__input {
   animation: stampIn 0.34s cubic-bezier(0.34, 1.4, 0.64, 1) both;
 }
 
-.stamp--received,
-.stamp--new {
+/* В карточке заказа слева только слово «Состояние», а статус LiveSklad
+   бывает длинным («Ожидание запчастей (до 15 дней)») — 44% ему мало. */
+.stamp--wide {
+  max-width: 66%;
+}
+
+/* Тона — семантические, а не «этап воронки»: см. src/lib/orderStatus.ts.
+   Красный `action` значит «ход за клиентом», а не «всё плохо». */
+.stamp--intake {
   color: var(--stamp-blue);
   background: var(--stamp-blue-wash);
 }
 
-.stamp--diagnosing,
-.stamp--in_progress {
+.stamp--work {
   color: var(--stamp-amber);
   background: var(--stamp-amber-wash);
 }
 
-.stamp--waiting_parts {
+.stamp--action {
   color: var(--signal-deep);
   background: var(--signal-wash);
 }
 
-.stamp--ready,
-.stamp--completed {
+.stamp--ready {
   color: var(--stamp-green);
   background: var(--stamp-green-wash);
 }
 
-/* На чёрной шапке талона краска светлая: статусы LiveSklad приходят
-   свободным текстом и часто садятся на базовый .stamp — он обязан
+.stamp--closed {
+  color: var(--ink-mute);
+  background: rgba(23, 21, 15, 0.05);
+}
+
+.stamp--rejected {
+  color: var(--stamp-red);
+  background: var(--stamp-red-wash);
+}
+
+/* На чёрной шапке талона краска светлая: тон определяется не всегда
+   (статусы LiveSklad — свободный текст), поэтому базовый .stamp обязан
    читаться сам по себе, без модификатора. */
 .ticket__head .stamp {
   color: var(--paper-hi);
   background: rgba(245, 241, 231, 0.07);
 }
 
-.ticket__head .stamp--received,
-.ticket__head .stamp--new {
+.ticket__head .stamp--intake {
   color: #7FB2EE;
 }
 
-.ticket__head .stamp--diagnosing,
-.ticket__head .stamp--in_progress {
+.ticket__head .stamp--work {
   color: #E5AE3D;
 }
 
-.ticket__head .stamp--waiting_parts {
+.ticket__head .stamp--action {
   color: #FF7A45;
 }
 
-.ticket__head .stamp--ready,
-.ticket__head .stamp--completed {
+.ticket__head .stamp--ready {
   color: #5CCB93;
+}
+
+.ticket__head .stamp--closed {
+  color: var(--paper-lo);
+}
+
+.ticket__head .stamp--rejected {
+  color: #E88A7E;
 }
 
 /* ── Талон ────────────────────────────────────── */

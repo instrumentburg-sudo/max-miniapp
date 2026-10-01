@@ -21,6 +21,7 @@ import {
 import { Screen } from '../components/Screen';
 import { TicketRow } from '../components/Ticket';
 import { IconCheck, IconPhone } from '../components/icons';
+import { stampClass, statusTone } from '../lib/orderStatus';
 
 const STAGE_FLOW = ['diagnostics', 'approval', 'repair', 'ready'] as const;
 
@@ -60,8 +61,12 @@ function StageTrack({ stage }: { stage: string }) {
     );
   }
 
+  // Точка текущей стадии красится в тот же тон, что и штамп статуса —
+  // иначе на карточке два разных «сигнальных» цвета про одно и то же.
+  const tone = statusTone(stage);
+
   return (
-    <ol className="track">
+    <ol className={`track${tone ? ` track--${tone}` : ''}`}>
       {STAGE_FLOW.map((step, index) => (
         <li
           key={step}
@@ -267,10 +272,12 @@ export function OrderCard() {
 
       <div className="ticket card-gap">
         <div className="ticket__head">
-          <span>
-            <span className="ticket__kind">Состояние</span>
-            <span className="ticket__num">{order.status ?? '—'}</span>
-          </span>
+          <span className="ticket__kind">Состояние</span>
+          {order.status ? (
+            <span className={`${stampClass(order.status)} stamp--wide`}>{order.status}</span>
+          ) : (
+            <span className="ticket__num">—</span>
+          )}
         </div>
         <div className="ticket__body">
           {order.typeDevice && <TicketRow label="Тип">{order.typeDevice}</TicketRow>}

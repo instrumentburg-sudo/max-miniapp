@@ -1,6 +1,6 @@
 # MAX intake, этап 1
 
-Кабинет и карточки LS сохранены. Отдельный список предзаявок обращается к `/api/intake/max-list`; его ошибка не мешает LS. На старом origin кнопки ремонта и аренды открывают обычный сайт с честным пояснением: аккаунт MAX при переходе не передаётся. После смены URL MAX общие формы и кабинет живут на одном origin. Авторизация хранится только в sessionStorage `ib_max_init` с проверкой auth_date (1 час); сервер проверяет подпись.
+Кабинет и карточки LS сохранены. Отдельный список предзаявок обращается к `/api/intake/max-list`; его ошибка не мешает LS. На старом origin каталог и карточка инструмента остаются внутри miniapp; кнопка бронирования и вход ремонта открывают обычный сайт с честным пояснением: аккаунт MAX при переходе не передаётся. После смены URL MAX общие формы и кабинет живут на одном origin. Авторизация хранится только в sessionStorage `ib_max_init` с проверкой auth_date (1 час); сервер проверяет подпись.
 
 Выкат выполняется только после разрешённого push и отдельного разрешения на deploy. До основного Convex deploy нужен узкий PHP handoff; полный порядок backup/B0/B1/rollback — в [max-deploy-safety.md](max-deploy-safety.md):
 
@@ -13,7 +13,9 @@ PHP `/bot/webhook` отвечает на свободный текст/номе�
 
 Проверки интегратора: `npm ci`, `npm run build`, `./deploy.sh --cabinet-artifact`, `npx tsc --noEmit`, `php -l api-php/index.php`, `php tests/webhook.php`. Браузер: 390/1440, mock Bridge с актуальным auth_date, Z-ошибка/зависший запрос при успешном LS и наоборот, отказ/просроченная сессия, переходы `/repair`, `/catalog`, `/rent`, `/rental`, `/orders/:number`. PHP тест использует callback, не вызывает сеть, не загружает production env.
 
-Кабинетная сборка соблюдает CSP общего сайта: Google Fonts исключены, используются committed локальные woff2 с системными fallback-шрифтами; bootstrap CSS/JS вынесены в локальные ассеты. Default `/max-app` HTML не меняется. Ссылка Z проверяется по HTTPS origin/path `/z.html` и на том же origin открывается внутри WebView. Старые `/catalog/:id` ведут в общую аренду с `product` (только допустимый идентификатор). PHP также подавляет `/start=token`.
+Кабинетная сборка соблюдает CSP общего сайта: Google Fonts исключены, используются committed локальные woff2 с системными fallback-шрифтами; bootstrap CSS/JS вынесены в локальные ассеты. Default `/max-app` HTML не меняется. Ссылка Z проверяется по HTTPS origin/path `/z.html` и на том же origin открывается внутри WebView. Маршрут `/catalog/:id` сохраняет фото и карточку инструмента; его CTA ведёт в общую аренду с `product` (тот же ocStore product_id). Каталог на обоих origin использует read-only RU `/max-api/catalog`; на zayavka добавлен точный GET-only nginx proxy. PHP также подавляет `/start=token`.
 
 
 Baseline provenance: ветка создана от origin/master `45637db`. По сравнению с уже действующим committed prod отсутствовали три коммита. Включены cherry-pick только зафиксированных коммитов основного checkout, без его dirty файлов: `5dc0f5e` → `84f70b5` (локальные шрифты), `aae2773` → `9779beb` (same-origin Convex PHP proxy), `dd8ebcb` → `63feac3` (OG). Перед переносом feature tracked diff сохранён бинарным patch `../mini-feature.patch`, затем применён обратно через `git apply --3way` без конфликтов; untracked feature файлы сохранены. Feature ещё не закоммичен.
+
+Раунд 4 восстановил production UI и PHP из B0/грязного checkout; подробности и источник истины в [b0-catalog-recovery.md](b0-catalog-recovery.md). Текущее production после отката архитектором — B1 + новый Convex. Повторный deploy раунда 4 не выполнялся; прежние разрешения шагов 1/2 не являются разрешением повторной выкладки.

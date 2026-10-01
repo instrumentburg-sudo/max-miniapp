@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 // ---------------------------------------------------------------------------
 // MAX Mini App — PHP API
-// Endpoints: GET /health, GET /order/{number}, POST /repair, POST /bot/webhook
+// Endpoints: GET /health, GET /order/{number}, GET /catalog, POST /repair,
+//            POST /rental-request, POST /bot/webhook
 //
 // POST /webhook and POST /debug below are a legacy bot handler that was
 // deployed straight to prod on 2026-03-04 and never committed to git (found
@@ -816,9 +817,27 @@ function respond_to_order_query(int $userId, string $rawText): void
 
     max_send_message(
         $userId,
-        'Здравствуйте! Это бот ИнструментБург. Пришлите номер заказа из квитанции (например, A023222) — покажем статус ремонта.',
-        [[max_miniapp_button('Проверить статус')]]
+        bot_welcome_text(),
+        [[max_miniapp_button('Открыть кабинет')]]
     );
+}
+
+/**
+ * Приветствие. Оно же — единственное место, где мы объясняем, зачем держать
+ * бота в чате: пока клиент не подписан, статус он проверяет сам, и о готовом
+ * инструменте узнаёт, только когда вспомнит позвонить.
+ */
+function bot_welcome_text(): string
+{
+    return "Здравствуйте! Это бот сервиса ИнструментБург.\n\n"
+         . "Пришлите номер заказа из квитанции (например, A023222) — ответим статусом ремонта.\n\n"
+         . "В мини-приложении открывается личный кабинет: все ваши ремонты и аренды по номеру телефона, "
+         . "смета построчно, согласование ремонта и оплата по СБП. Там же каталог проката с ценами и бронью.\n\n"
+         . "Оставьте бота в чатах — напишем сами:\n"
+         . "• диагностика закончена, смета готова;\n"
+         . "• инструмент готов к выдаче;\n"
+         . "• срок аренды заканчивается завтра;\n"
+         . "• оплата прошла.";
 }
 
 /** Explicit shared Unicode set; the legacy boundary deliberately excludes NEL. */
@@ -839,7 +858,9 @@ function max_legacy_start_command(string $text): ?array
 function max_forward_start_envelope(array $update, string $token, string $timestamp): array
 {
     if ($token === '') throw new RuntimeException('MAX forwarding is not configured');
-    $raw = json_encode($update, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    // B0 runs on web-PHP 7.2: JSON_THROW_ON_ERROR was introduced only in 7.3.
+    $raw = json_encode($update, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($raw === false) throw new RuntimeException('MAX forwarding payload is not encodable');
     $signature = hash_hmac('sha256', "ib-max-start-v1\n" . $timestamp . "\n" . $raw, $token);
     return ['body' => $raw, 'headers' => ['Content-Type: application/json', 'X-IB-Max-Forward: v1', 'X-IB-Max-Timestamp: ' . $timestamp, 'X-IB-Max-Signature: ' . $signature]];
 }
@@ -873,6 +894,12 @@ function process_bot_update(array $update, ?callable $respond = null, ?callable 
 
     $message = $update['message'] ?? null;
     if (!is_array($message)) {
+        return;
+    }
+
+    $recipient = $message['recipient'] ?? null;
+    $chatType = is_array($recipient) ? ($recipient['chat_type'] ?? null) : null;
+    if ($chatType === 'chat' || $chatType === 'channel') {
         return;
     }
 
@@ -1037,7 +1064,7 @@ function handle_legacy_webhook(): void
             $phoneMsg = "ИнструментБург\n\n"
                       . "+7 (343) 226-44-43 — основной\n"
                       . "+7 (343) 226-44-43 — дополнительный\n\n"
-                      . "Пн-Пт: 9:00-18:00, Сб: 10:00-15:00";
+                      . "Ежедневно: 9:00-18:00";
             legacy_max_send_message((int)$chatId, $phoneMsg);
         }
         json_response(['ok' => true]);
@@ -1053,6 +1080,285 @@ function handle_legacy_debug(): void
     $entry = date('Y-m-d H:i:s') . " | " . ($_SERVER['REMOTE_ADDR'] ?? '?') . "\n" . $raw . "\n---\n";
     file_put_contents($logFile, $entry, FILE_APPEND);
     json_response(['ok' => true]);
+}
+
+// --- Каталог аренды --------------------------------------------------------
+//
+// Источник — боевая база сайта (ocStore), а не копия. Копия каталога в
+// приложении уже была отвергнута: цены и наличие расходились с сайтом, а
+// второго источника остатков нет. API и сайт живут на одном хосте и под
+// одним пользователем, поэтому читаем ту же MariaDB напрямую.
+//
+// Корень раздела аренды — категория 164 (`/arenda-instrumenta`).
+
+const CATALOG_ROOT_CATEGORY = 164;
+const CATALOG_CACHE_TTL     = 600;
+const CATALOG_THUMB_SIZE    = 400;
+
+function site_root(): string
+{
+    return '/home/c50684/instrumentburg.ru/www';
+}
+
+function catalog_db(): ?mysqli
+{
+    static $db = null;
+    if ($db instanceof mysqli) {
+        return $db;
+    }
+
+    $config = site_root() . '/config.php';
+    if (!is_file($config)) {
+        error_log('[max-api] catalog: site config.php not found');
+        return null;
+    }
+    require_once $config;
+
+    $conn = @new mysqli(DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE);
+    if ($conn->connect_errno) {
+        error_log('[max-api] catalog: db connect failed: ' . $conn->connect_error);
+        return null;
+    }
+    $conn->set_charset('utf8mb4');
+    $db = $conn;
+
+    return $db;
+}
+
+/**
+ * Превью в кэше ocStore: тот же путь, что генерит сайт, поэтому один и тот же
+ * файл переиспользуется сайтом и приложением, а раздаёт его nginx статикой.
+ * Возвращает URL или null, если исходника нет и превью не собрать.
+ */
+function catalog_thumb_url(string $image): ?string
+{
+    $image = ltrim(trim($image), '/');
+    // Только под image/, только безопасные имена: путь приходит из БД, но
+    // подставлять его в файловые операции без проверки всё равно нельзя.
+    if ($image === '' || strpos($image, '..') !== false) {
+        return null;
+    }
+
+    $source = site_root() . '/image/' . $image;
+    if (!is_file($source)) {
+        return null;
+    }
+
+    $dot = strrpos($image, '.');
+    if ($dot === false) {
+        return null;
+    }
+    $ext  = strtolower(substr($image, $dot + 1));
+    $size = CATALOG_THUMB_SIZE;
+    $rel  = substr($image, 0, $dot) . "-{$size}x{$size}." . $ext;
+    $dest = site_root() . '/image/cache/' . $rel;
+    $url  = 'https://instrumentburg.ru/image/cache/' . str_replace('%2F', '/', rawurlencode($rel));
+
+    if (is_file($dest)) {
+        return $url;
+    }
+
+    if (!@mkdir(dirname($dest), 0755, true) && !is_dir(dirname($dest))) {
+        return null;
+    }
+
+    try {
+        $img = new Imagick($source);
+        $img->setImageBackgroundColor('white');
+        $img = $img->mergeImageLayers(Imagick::LAYERMETHOD_FLATTEN);
+        // thumbnailImage с bestfit не добивает до квадрата — карточки в
+        // приложении и так задают фиксированный бокс, важнее не искажать.
+        $img->thumbnailImage($size, $size, true);
+        $img->stripImage();
+        $img->setImageCompressionQuality(82);
+        $img->writeImage($dest);
+        $img->clear();
+    } catch (Throwable $e) {
+        error_log('[max-api] catalog: thumb failed for ' . $image . ': ' . $e->getMessage());
+        return null;
+    }
+
+    return $url;
+}
+
+/** Only an explicit numeric amount is a deposit. Absence is unknown, never zero. */
+function catalog_deposit(string $description): ?float
+{
+    $text = html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $text = preg_replace('/<[^>]*>/', ' ', $text) ?? $text;
+    // Require a complete amount ending in currency, sentence punctuation or EOF.
+    // A partial parse of "12 34" or "5000–10000" would misstate the deposit.
+    $pattern = '/(?:^|[^\p{L}])залог\s*:\s*([0-9]+(?:[ \x{00A0}\x{202F}][0-9]{3})*(?:[.,][0-9]{1,2})?)(?:\s*(?:₽|руб(?:ль|ля|лей|\.)?)(?![\p{L}0-9])|(?=\s*(?:$|[;.!?](?:\s|$))))/iu';
+    if (!preg_match($pattern, $text, $match, PREG_OFFSET_CAPTURE)) return null;
+    $tail = substr($text, $match[0][1] + strlen($match[0][0]));
+    if (preg_match('/^\s*(?:[-–—+\/]|до\s*[0-9])/iu', $tail)) return null;
+    $match[1] = $match[1][0];
+    $amount = (float)str_replace(',', '.', preg_replace('/[ \x{00A0}\x{202F}]/u', '', $match[1]) ?? $match[1]);
+    return is_finite($amount) && $amount >= 0 ? $amount : null;
+}
+
+/** B0 catalog projection, plus an informational deposit from the same ocStore row. */
+function catalog_item(array $row, array $names, ?callable $thumbnail = null): array
+{
+    $categoryId = $row['category_id'] !== null ? (int)$row['category_id'] : 0;
+    $price = (float)$row['price'];
+    $keyword = (string)($row['keyword'] ?? '');
+    $article = trim((string)$row['model']);
+    $name = trim((string)$row['name']);
+    if ($article !== '' && strpos($name, $article . ' ') === 0) $name = trim(substr($name, strlen($article)));
+    return [
+        'id' => (int)$row['product_id'], 'article' => $article, 'name' => $name,
+        'categoryId' => $categoryId, 'category' => $names[$categoryId] ?? 'Прочее',
+        'pricePerDay' => $price > 0 ? (int)round($price) : null,
+        'available' => (int)$row['quantity'] > 0,
+        'image' => ($thumbnail ?? 'catalog_thumb_url')((string)$row['image']),
+        'url' => $keyword !== '' ? 'https://instrumentburg.ru/' . $keyword : null,
+        'deposit' => catalog_deposit((string)($row['description'] ?? '')),
+    ];
+}
+
+function catalog_build(): array
+{
+    $db = catalog_db();
+    if ($db === null) {
+        return ['categories' => [], 'items' => []];
+    }
+
+    // Одним запросом: позиция + самая КОНКРЕТНАЯ её категория внутри раздела
+    // аренды. Товар лежит и в «Строительном инструменте», и в «Генераторах» —
+    // клиенту нужна вторая, поэтому берём максимальный level в дереве 164.
+    $sql = "
+        SELECT
+            p.product_id,
+            p.model,
+            p.price,
+            p.quantity,
+            p.image,
+            pd.name,
+            pd.description,
+            (
+                SELECT cp.category_id
+                FROM " . DB_PREFIX . "product_to_category p2c
+                JOIN " . DB_PREFIX . "category_path cp ON cp.category_id = p2c.category_id
+                JOIN " . DB_PREFIX . "category c ON c.category_id = cp.category_id AND c.status = 1
+                WHERE p2c.product_id = p.product_id AND cp.path_id = " . CATALOG_ROOT_CATEGORY . "
+                ORDER BY cp.level DESC, cp.category_id DESC
+                LIMIT 1
+            ) AS category_id,
+            (
+                SELECT s.keyword FROM " . DB_PREFIX . "seo_url s
+                WHERE s.query = CONCAT('product_id=', p.product_id)
+                ORDER BY s.seo_url_id LIMIT 1
+            ) AS keyword
+        FROM " . DB_PREFIX . "product p
+        JOIN " . DB_PREFIX . "product_description pd
+          ON pd.product_id = p.product_id AND pd.language_id = 1
+        WHERE p.status = 1
+          AND p.product_id IN (
+              SELECT p2c.product_id
+              FROM " . DB_PREFIX . "product_to_category p2c
+              JOIN " . DB_PREFIX . "category_path cp ON cp.category_id = p2c.category_id
+              WHERE cp.path_id = " . CATALOG_ROOT_CATEGORY . "
+          )
+        ORDER BY pd.name
+    ";
+
+    $res = $db->query($sql);
+    if ($res === false) {
+        error_log('[max-api] catalog: query failed: ' . $db->error);
+        return ['categories' => [], 'items' => []];
+    }
+
+    $names = catalog_category_names($db);
+    $items = [];
+    $used  = [];
+
+    while ($row = $res->fetch_assoc()) {
+        $item = catalog_item($row, $names);
+        $categoryId = $item['categoryId'];
+        $items[] = $item;
+
+        if ($categoryId !== 0) {
+            $used[$categoryId] = ($used[$categoryId] ?? 0) + 1;
+        }
+    }
+
+    $categories = [];
+    foreach ($used as $id => $count) {
+        $categories[] = ['id' => $id, 'name' => $names[$id] ?? 'Прочее', 'count' => $count];
+    }
+    // Стрелочные функции появились в 7.4 — на боевом web-PHP 7.2 их нет.
+    usort($categories, function (array $a, array $b) {
+        return strcoll($a['name'], $b['name']);
+    });
+
+    return ['categories' => $categories, 'items' => $items];
+}
+
+function catalog_category_names(mysqli $db): array
+{
+    $res = $db->query("
+        SELECT cd.category_id, cd.name
+        FROM " . DB_PREFIX . "category_description cd
+        WHERE cd.language_id = 1
+    ");
+    if ($res === false) {
+        return [];
+    }
+
+    $names = [];
+    while ($row = $res->fetch_assoc()) {
+        // Категории аренды названы «Аренда виброплит» — в приложении раздел
+        // и так называется «Аренда», префикс в каждом чипе только шумит.
+        $name = trim((string)$row['name']);
+        $name = preg_replace('/^аренда\s+/iu', '', $name) ?? $name;
+        $names[(int)$row['category_id']] = $name === '' ? 'Прочее' : mb_convert_case(mb_substr($name, 0, 1), MB_CASE_UPPER) . mb_substr($name, 1);
+    }
+
+    return $names;
+}
+
+function handle_catalog(): void
+{
+    // 103 позиции — это ~30 КБ JSON. Отдаём каталог целиком: поиск и фильтр
+    // по категориям работают в приложении мгновенно и без повторных запросов,
+    // а WebView MAX умеет терять запросы по дороге.
+    $cacheFile = '/home/c50684/instrumentburg.ru/max-api-env/.catalog-cache.json';
+    $cached    = @file_get_contents($cacheFile);
+
+    if ($cached !== false && $cached !== '') {
+        $data = json_decode($cached, true);
+        if (is_array($data) && ($data['catalogVersion'] ?? 0) === 2 && (time() - (int)($data['builtAt'] ?? 0)) < CATALOG_CACHE_TTL) {
+            json_response($data);
+        }
+    }
+
+    $built = catalog_build();
+    $built['builtAt'] = time();
+    $built['catalogVersion'] = 2;
+
+    $encoded = json_encode($built, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($encoded !== false && $built['items'] !== []) {
+        // Атомарная замена: параллельный читатель не должен увидеть половину.
+        $tmp = $cacheFile . '.' . getmypid() . '.tmp';
+        if (@file_put_contents($tmp, $encoded) !== false) {
+            @chmod($tmp, 0600);
+            @rename($tmp, $cacheFile);
+        }
+    }
+
+    if ($built['items'] === []) {
+        // Пустой каталог — это сбой БД, а не «нет инструмента в прокате».
+        // Если есть просроченный кэш, он честнее пустого экрана.
+        if (isset($data) && is_array($data) && !empty($data['items'])) {
+            foreach ($data['items'] as &$item) { if (!array_key_exists('deposit', $item)) $item['deposit'] = null; }
+            unset($item);
+            json_response($data);
+        }
+        json_response(['error' => 'catalog_unavailable'], 503);
+    }
+
+    json_response($built);
 }
 
 function handle_repair()
@@ -1098,16 +1404,28 @@ function handle_repair()
         $text .= "\n*MAX ID:* " . escape_markdown((string)$maxUserId);
     }
 
-    // Send to Telegram
+    if (!telegram_notify_tasks($text)) {
+        json_response([
+            'success' => false,
+            'message' => 'Не удалось отправить заявку. Позвоните: +7 (343) 226-44-43',
+        ], 500);
+    }
+
+    json_response([
+        'success' => true,
+        'message' => 'Заявка отправлена! Мы свяжемся с вами в ближайшее время.',
+    ]);
+}
+
+/** Заявка в чат «ИБ задачи». `false` — не доставлено, клиенту нужен телефон. */
+function telegram_notify_tasks(string $text): bool
+{
     $botToken = env('TELEGRAM_BOT_TOKEN');
     $chatId   = env('TELEGRAM_IB_TASKS_CHAT_ID');
 
     if ($botToken === '' || $chatId === '') {
         error_log('[max-api] TELEGRAM_BOT_TOKEN or TELEGRAM_IB_TASKS_CHAT_ID not set');
-        json_response([
-            'success' => false,
-            'message' => 'Не удалось отправить заявку. Позвоните: +7 (343) 226-44-43',
-        ], 500);
+        return false;
     }
 
     $payload = json_encode([
@@ -1132,25 +1450,75 @@ function handle_repair()
 
     if ($response === false) {
         error_log("[max-api] Telegram curl error: $error");
-        json_response([
-            'success' => false,
-            'message' => 'Не удалось отправить заявку. Позвоните: +7 (343) 226-44-43',
-        ], 500);
+        return false;
     }
 
     $tgData = json_decode($response, true);
-
     if ($httpCode !== 200 || !($tgData['ok'] ?? false)) {
         error_log("[max-api] Telegram HTTP $httpCode: $response");
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Бронь инструмента из каталога. LiveSklad не умеет создавать заказы через
+ * API, поэтому бронь — это задача менеджеру, как и запись на ремонт.
+ */
+function handle_rental_request(): void
+{
+    if (env('MAX_LEGACY_TELEGRAM_ENABLED') !== '1') {
+        json_response(['error' => 'legacy_disabled', 'message' => 'Оформите предзаявку на https://zayavka.instrumentburg.ru/rent.html'], 410);
+    }
+    $body = get_json_body();
+
+    $productName = trim((string)($body['product_name'] ?? ''));
+    $phone       = trim((string)($body['phone'] ?? ''));
+
+    if ($productName === '' || $phone === '') {
         json_response([
             'success' => false,
-            'message' => 'Не удалось отправить заявку. Позвоните: +7 (343) 226-44-43',
+            'message' => 'Поля "product_name" и "phone" обязательны',
+        ], 400);
+    }
+
+    $article   = trim((string)($body['article'] ?? ''));
+    $productId = (int)($body['product_id'] ?? 0);
+    $days      = max(1, min(90, (int)($body['days'] ?? 1)));
+    $comment   = trim((string)($body['comment'] ?? ''));
+    $userName  = trim((string)($body['user_name'] ?? ''));
+    $maxUserId = $body['max_user_id'] ?? null;
+
+    $text = "\xF0\x9F\x94\xA9 *Бронь инструмента* (MAX Mini App)\n\n"
+          . '*Инструмент:* ' . escape_markdown($productName) . "\n"
+          . '*Артикул:* ' . escape_markdown($article !== '' ? $article : '—') . "\n"
+          . '*Срок:* ' . $days . " сут.\n"
+          . '*Телефон:* ' . escape_markdown($phone);
+
+    if ($comment !== '') {
+        $text .= "\n*Комментарий:* " . escape_markdown($comment);
+    }
+    if ($userName !== '') {
+        $text .= "\n*Имя:* " . escape_markdown($userName);
+    }
+    if ($maxUserId !== null) {
+        $text .= "\n*MAX ID:* " . escape_markdown((string)$maxUserId);
+    }
+    if ($productId > 0) {
+        $text .= "\n*Карточка:* https://instrumentburg.ru/index.php?route=product/product&product_id=" . $productId;
+    }
+
+    if (!telegram_notify_tasks($text)) {
+        json_response([
+            'success' => false,
+            'message' => 'Не удалось отправить бронь. Позвоните: +7 (343) 226-44-43',
         ], 500);
     }
 
     json_response([
         'success' => true,
-        'message' => 'Заявка отправлена! Мы свяжемся с вами в ближайшее время.',
+        'message' => 'Бронь принята. Менеджер подтвердит наличие и сроки.',
     ]);
 }
 
@@ -1255,6 +1623,14 @@ if ($method === 'GET' && $path === '/health') {
 
 if ($method === 'GET' && preg_match('#^/order/([^/]+)$#', $path, $m)) {
     handle_order_lookup(urldecode($m[1]));
+}
+
+if ($method === 'GET' && $path === '/catalog') {
+    handle_catalog();
+}
+
+if ($method === 'POST' && $path === '/rental-request') {
+    handle_rental_request();
 }
 
 if ($method === 'POST' && $path === '/repair') {

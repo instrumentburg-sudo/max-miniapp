@@ -7,6 +7,8 @@ import { LinkAccount } from './pages/LinkAccount';
 import { MyOrders } from './pages/MyOrders';
 import { IntakeEntry } from './pages/IntakeEntry';
 import { OrderCard } from './pages/OrderCard';
+import { Catalog } from './pages/Catalog';
+import { RentalBooking } from './pages/RentalBooking';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -71,8 +73,8 @@ export function App() {
             <Route path="/link" element={<LinkAccount />} />
             <Route path="/orders" element={<MyOrders />} />
             <Route path="/orders/:number" element={<OrderCard />} />
-            <Route path="/catalog/:id" element={<IntakeEntry kind="rent" />} />
-            <Route path="/catalog" element={<IntakeEntry kind="rent" />} />
+            <Route path="/catalog/:id" element={<RentalBooking />} />
+            <Route path="/catalog" element={<Catalog />} />
             <Route path="/rent" element={<IntakeEntry kind="rent" />} />
             <Route path="/rental" element={<IntakeEntry kind="rent" />} />
             <Route path="/repair" element={<IntakeEntry kind="repair" />} />

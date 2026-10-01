@@ -4,6 +4,7 @@ import { ApiError, fetchOrderStatus, type OrderStatus as OrderStatusType } from 
 import { Screen } from '../components/Screen';
 import { TicketRow } from '../components/Ticket';
 import { IconPhone } from '../components/icons';
+import { stampClass } from '../lib/orderStatus';
 
 const STATUS_LABELS: Record<string, string> = {
   received: 'Принят',
@@ -100,7 +101,7 @@ export function OrderStatus() {
                 <span className="ticket__kind">Заказ-наряд</span>
                 <span className="ticket__num">{order.order_number}</span>
               </span>
-              <span className={`stamp stamp--${order.status}`}>
+              <span className={stampClass(order.status)}>
                 {STATUS_LABELS[order.status] ?? order.status_label}
               </span>
             </div>

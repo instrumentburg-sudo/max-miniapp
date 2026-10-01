@@ -5,6 +5,7 @@ import { ApiError, fetchMyOrders, NetworkError, type ClientOrder } from '../api'
 import { IntakeRequests } from '../components/IntakeRequests';
 import { Screen } from '../components/Screen';
 import { TicketRow } from '../components/Ticket';
+import { stampClass } from '../lib/orderStatus';
 
 function formatSum(sum: number | null): string | null {
   if (sum === null || !Number.isFinite(sum) || sum <= 0) return null;
@@ -31,7 +32,7 @@ function OrderTicket({ order, onOpen }: { order: ClientOrder; onOpen: (number: s
           <span className="ticket__kind">{order.kind === 'rental' ? 'Аренда' : 'Заказ-наряд'}</span>
           <span className="ticket__num">{order.number}</span>
         </span>
-        {order.status && <span className="stamp">{order.status}</span>}
+        {order.status && <span className={stampClass(order.status)}>{order.status}</span>}
       </div>
       <div className="ticket__body">
         <TicketRow label="Инструмент">{order.title}</TicketRow>
@@ -197,7 +198,7 @@ export function MyOrders() {
             className="btn btn--ghost"
             onClick={() => navigate('/catalog')}
           >
-            Каталог аренды на сайте
+            Каталог аренды
           </button>
         </div>
       )}

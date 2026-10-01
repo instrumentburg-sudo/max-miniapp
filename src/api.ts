@@ -84,6 +84,67 @@ export interface RepairResponse {
   message: string;
 }
 
+/* ─── Каталог аренды ─── */
+
+export interface CatalogCategory {
+  id: number;
+  name: string;
+  count: number;
+}
+
+export interface CatalogItem {
+  id: number;
+  article: string;
+  name: string;
+  categoryId: number;
+  category: string;
+  /** Рублей за сутки. `null` — цена не проставлена, спрашиваем менеджера. */
+  pricePerDay: number | null;
+  available: boolean;
+  image: string | null;
+  url: string | null;
+}
+
+export interface Catalog {
+  categories: CatalogCategory[];
+  items: CatalogItem[];
+  builtAt: number;
+}
+
+/**
+ * Каталог отдаётся целиком (~145 КБ, gzip ~25 КБ): дальше поиск и фильтры
+ * работают локально. Пагинация в WebView MAX означала бы повторные запросы —
+ * а именно их этот WebView и умеет терять.
+ */
+export function fetchCatalog(): Promise<Catalog> {
+  return apiFetch<Catalog>('/catalog');
+}
+
+/* ─── Заявка на аренду ─── */
+
+export interface RentalRequest {
+  product_id: number;
+  product_name: string;
+  article: string;
+  days: number;
+  phone: string;
+  comment?: string;
+  user_name?: string;
+  max_user_id?: number;
+}
+
+export interface RentalResponse {
+  success: boolean;
+  message: string;
+}
+
+export function submitRentalRequest(data: RentalRequest): Promise<RentalResponse> {
+  return apiFetch<RentalResponse>('/rental-request', {
+    method: 'POST',
+    body: data as unknown as Record<string, unknown>,
+  });
+}
+
 export function submitRepairRequest(data: RepairRequest): Promise<RepairResponse> {
   return apiFetch<RepairResponse>('/repair', { method: 'POST', body: data as unknown as Record<string, unknown> });
 }

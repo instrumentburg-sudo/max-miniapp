@@ -5,7 +5,7 @@ import { IconArrow, IconBox, IconCrane, IconPhone, IconPin, IconSearch, IconWren
 const JOBS = [
   { idx: '01', title: 'Мои заказы', sub: 'Ремонты и аренды на вашем номере', icon: IconBox, to: '/orders' },
   { idx: '02', title: 'Статус по номеру', sub: 'Если заказ оформлен на другой номер', icon: IconSearch, to: '/order' },
-  { idx: '03', title: 'Каталог аренды', sub: 'Выбор инструмента и предзаявка', icon: IconCrane, to: '/catalog' },
+  { idx: '03', title: 'Аренда инструмента', sub: 'Каталог, цены и бронь', icon: IconCrane, to: '/catalog' },
   { idx: '04', title: 'Запись на ремонт', sub: 'Бесплатная диагностика', icon: IconWrench, to: '/repair' },
 ] as const;
 
@@ -70,7 +70,7 @@ export function Home() {
           <IconPhone size={18} />
           <a href="tel:+73432264443">+7 (343) 226-44-43</a>
         </div>
-        <div className="colophon__stamp">Пн–Пт 9:00–18:00 · Сб 10:00–15:00</div>
+        <div className="colophon__stamp">Работаем 7 дней в неделю · 9:00–18:00</div>
       </footer>
     </div>
   );

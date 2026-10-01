@@ -42,3 +42,18 @@ if ($called !== []) throw new RuntimeException('Forward failure must not send ge
 try { max_forward_start($message('start')); throw new RuntimeException('Test network guard missing'); }
 catch (RuntimeException $e) { if ($e->getMessage() !== 'Inject a forwarding callback in tests') throw $e; }
 echo "PASS forward failure has no second responder; no test-mode network calls\n";
+
+$called = []; $forwarded = [];
+foreach (['chat', 'channel'] as $chatType) {
+    foreach (['Мой заказ A023222', 'START'] as $text) {
+        $event = $message($text);
+        $event['message']['recipient'] = ['chat_type' => $chatType];
+        process_bot_update($event, $respond, $forward);
+    }
+}
+if ($called !== [] || $forwarded !== []) throw new RuntimeException('B0 group/channel guard was lost');
+echo "PASS B0 private-chat-only PHP dispatch retained\n";
+
+try { max_forward_start_envelope(['invalid' => "\xB1\x31"], 'dummy', '1790848800'); throw new RuntimeException('Malformed JSON accepted'); }
+catch (RuntimeException $e) { if ($e->getMessage() !== 'MAX forwarding payload is not encodable') throw $e; }
+echo "PASS PHP 7.2 compatible forwarding JSON failure guard\n";
