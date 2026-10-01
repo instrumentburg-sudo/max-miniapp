@@ -1,0 +1,127 @@
+[
+  {
+    "text": "/start",
+    "start": true,
+    "payload": null
+  },
+  {
+    "text": "start",
+    "start": true,
+    "payload": null
+  },
+  {
+    "text": "/START",
+    "start": true,
+    "payload": null
+  },
+  {
+    "text": " /start",
+    "start": true,
+    "payload": null
+  },
+  {
+    "text": "Start",
+    "start": true,
+    "payload": null
+  },
+  {
+    "text": "/start@id662337117117_bot=token",
+    "start": true,
+    "payload": "token"
+  },
+  {
+    "text": "/start token",
+    "start": true,
+    "payload": "token"
+  },
+  {
+    "text": " start@BOT = token ",
+    "start": true,
+    "payload": "token"
+  },
+  {
+    "text": "/START\tTOKEN",
+    "start": true,
+    "payload": "TOKEN"
+  },
+  {
+    "text": "/start\nabc",
+    "start": true,
+    "payload": "abc"
+  },
+  {
+    "text": "/start=abc extra",
+    "start": true,
+    "payload": "abc"
+  },
+  {
+    "text": " /start token ",
+    "start": true,
+    "payload": "token"
+  },
+  {
+    "text": "﻿/start=abc﻿",
+    "start": true,
+    "payload": "abc"
+  },
+  {
+    "text": "/start=",
+    "start": false,
+    "payload": null
+  },
+  {
+    "text": "A023222",
+    "start": false,
+    "payload": null
+  },
+  {
+    "text": "Здравствуйте",
+    "start": false,
+    "payload": null
+  },
+  {
+    "text": "/starting",
+    "start": false,
+    "payload": null
+  },
+  {
+    "text": "starter",
+    "start": false,
+    "payload": null
+  },
+  {
+    "text": "/start@",
+    "start": false,
+    "payload": null
+  },
+  {
+    "text": "/start@bot!",
+    "start": false,
+    "payload": null
+  },
+  {
+    "text": "/start-token",
+    "start": false,
+    "payload": null
+  },
+  {
+    "text": "restart",
+    "start": false,
+    "payload": null
+  },
+  {
+    "text": "x /start",
+    "start": false,
+    "payload": null
+  },
+  {
+    "text": "",
+    "start": false,
+    "payload": null
+  },
+  {
+    "text": "   ",
+    "start": false,
+    "payload": null
+  }
+]

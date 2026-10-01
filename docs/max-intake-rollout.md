@@ -2,9 +2,9 @@
 
 Кабинет и карточки LS сохранены. Отдельный список предзаявок обращается к `/api/intake/max-list`; его ошибка не мешает LS. На старом origin кнопки ремонта и аренды открывают обычный сайт с честным пояснением: аккаунт MAX при переходе не передаётся. После смены URL MAX общие формы и кабинет живут на одном origin. Авторизация хранится только в sessionStorage `ib_max_init` с проверкой auth_date (1 час); сервер проверяет подпись.
 
-Выкат выполняется только после разрешённого push/деплоя монорепо:
+Выкат выполняется только после разрешённого push и отдельного разрешения на deploy. До основного Convex deploy нужен узкий PHP handoff; полный порядок backup/B0/B1/rollback — в [max-deploy-safety.md](max-deploy-safety.md):
 
-1. Влить согласованный miniapp commit в master. Штатный `./deploy.sh` выкладывает `/max-app` и PHP. Проверить кабинет по старому URL.
+1. Влить согласованный miniapp commit в master. Выполнить `./deploy.sh --handoff-only`, затем `./deploy.sh --backup-only` и сохранить B1. Только потом основной Convex deploy. Штатный `./deploy.sh` выкладывает `/max-app` и PHP. Проверить кабинет по старому URL.
 2. Из master `./deploy.sh --cabinet-artifact` создаёт локальный `dist-cabinet`, включая `version.json` (`sha`, `base`). Команда не публикует файлы. Передать абсолютный путь `CABINET_DIST` скрипту self-service. Там nginx `/cabinet/` даёт SPA fallback, `/max-api/order/` проксирует read-only lookup на старый PHP. Для кабинета сохранён production same-origin `/max-api/cvx`: whitelist POST `/api/max/link`, `/api/max/orders`, `/api/max/order`, `/api/outcome`, `/api/pay` и GET `/api/order` (с префиксом `/max-api/cvx`).
 3. После публикации и проверки общего сайта в кабинете бизнеса MAX открыть бота `id662337117117_bot`, настройки мини-приложения и заменить URL `https://instrumentburg.ru/max-app/` на `https://zayavka.instrumentburg.ru/`. Название поля зависит от интерфейса MAX; требуется действие владельца. Старый `/max-app` остаётся рабочим кабинетом.
 4. Проверить запуск `https://max.ru/id662337117117_bot?startapp`, входы `?startapp=repair` и `?startapp=rent`, возврат в `/cabinet/orders`. Не отправлять тестовую заявку на production.

@@ -821,6 +821,14 @@ function respond_to_order_query(int $userId, string $rawText): void
     );
 }
 
+/** Same grammar as Convex parseMaxStartCommand; see tests/start-commands.json. */
+function max_start_command(string $text): ?array
+{
+    // Match JS trim for Unicode whitespace too, including NBSP and BOM.
+    $text = preg_replace('/^[\s\x{FEFF}]+|[\s\x{FEFF}]+$/u', '', $text) ?? $text;
+    return preg_match('/^(?:\/start|start)(?:@[A-Za-z0-9_]+)?(?:[\s=]+(\S+))?(?=\s|$)/iu', $text, $match) ? $match : null;
+}
+
 function process_bot_update(array $update, ?callable $respond = null): void
 {
     $updateType = (string)($update['update_type'] ?? '');
@@ -852,7 +860,7 @@ function process_bot_update(array $update, ?callable $respond = null): void
         if (($attachment['type'] ?? '') === 'contact') return;
     }
     $trimmed = trim($text);
-    if ($trimmed === '' || preg_match('/^(?:\/start(?:@\S+)?|start)(?:[\s=]|$)/iu', $trimmed)) return;
+    if ($trimmed === '' || max_start_command($text) !== null) return;
     ($respond ?? 'respond_to_order_query')((int)$userId, $text);
 }
 
