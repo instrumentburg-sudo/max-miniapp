@@ -1181,20 +1181,36 @@ function catalog_thumb_url(string $image): ?string
     return $url;
 }
 
-/** Only an explicit numeric amount is a deposit. Absence is unknown, never zero. */
+/** Display evidence only: generated numeric zeros are not a promise of no deposit. */
 function catalog_deposit(string $description): ?float
 {
     $text = html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $text = preg_replace('/<!--.*?-->|<(script|style|template)\b[^>]*>.*?<\/\1\s*>/isu', ' ', $text) ?? $text;
+    $text = preg_replace('/<\/?(?:p|div|li|br|h[1-6]|section)\b[^>]*>/iu', "\n", $text) ?? $text;
     $text = preg_replace('/<[^>]*>/', ' ', $text) ?? $text;
+    // A standalone statement only: not «без залога для ...» or «не без залога».
+    $withoutDeposit = (bool)preg_match('/(?:^|[.!?;\r\n])[^\S\r\n]*без[ \x{00A0}\x{202F}]+залога[^\S\r\n]*(?:[.!?;\r\n]|$)/iu', $text);
     // Require a complete amount ending in currency, sentence punctuation or EOF.
     // A partial parse of "12 34" or "5000–10000" would misstate the deposit.
     $pattern = '/(?:^|[^\p{L}])залог\s*:\s*([0-9]+(?:[ \x{00A0}\x{202F}][0-9]{3})*(?:[.,][0-9]{1,2})?)(?:\s*(?:₽|руб(?:ль|ля|лей|\.)?)(?![\p{L}0-9])|(?=\s*(?:$|[;.!?](?:\s|$))))/iu';
-    if (!preg_match($pattern, $text, $match, PREG_OFFSET_CAPTURE)) return null;
+    if (!preg_match($pattern, $text, $match, PREG_OFFSET_CAPTURE)) return $withoutDeposit ? 0.0 : null;
     $tail = substr($text, $match[0][1] + strlen($match[0][0]));
     if (preg_match('/^\s*(?:[-–—+\/]|до\s*[0-9])/iu', $tail)) return null;
     $match[1] = $match[1][0];
     $amount = (float)str_replace(',', '.', preg_replace('/[ \x{00A0}\x{202F}]/u', '', $match[1]) ?? $match[1]);
-    return is_finite($amount) && $amount >= 0 ? $amount : null;
+    if (!is_finite($amount) || $amount < 0) return null;
+    if ($withoutDeposit) return $amount === 0.0 ? 0.0 : null; // Conflicting statements are unknown.
+    return $amount > 0 ? $amount : null;
+}
+
+/** Older cache generations lack reliable display evidence, including positive values. */
+function catalog_cached_deposits(array $data): array
+{
+    if (($data['catalogVersion'] ?? 0) !== 3) {
+        foreach ($data['items'] as &$item) $item['deposit'] = null;
+        unset($item);
+    }
+    return $data;
 }
 
 /** B0 catalog projection, plus an informational deposit from the same ocStore row. */
@@ -1328,14 +1344,14 @@ function handle_catalog(): void
 
     if ($cached !== false && $cached !== '') {
         $data = json_decode($cached, true);
-        if (is_array($data) && ($data['catalogVersion'] ?? 0) === 2 && (time() - (int)($data['builtAt'] ?? 0)) < CATALOG_CACHE_TTL) {
+        if (is_array($data) && ($data['catalogVersion'] ?? 0) === 3 && (time() - (int)($data['builtAt'] ?? 0)) < CATALOG_CACHE_TTL) {
             json_response($data);
         }
     }
 
     $built = catalog_build();
     $built['builtAt'] = time();
-    $built['catalogVersion'] = 2;
+    $built['catalogVersion'] = 3;
 
     $encoded = json_encode($built, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if ($encoded !== false && $built['items'] !== []) {
@@ -1351,9 +1367,7 @@ function handle_catalog(): void
         // Пустой каталог — это сбой БД, а не «нет инструмента в прокате».
         // Если есть просроченный кэш, он честнее пустого экрана.
         if (isset($data) && is_array($data) && !empty($data['items'])) {
-            foreach ($data['items'] as &$item) { if (!array_key_exists('deposit', $item)) $item['deposit'] = null; }
-            unset($item);
-            json_response($data);
+            json_response(catalog_cached_deposits($data));
         }
         json_response(['error' => 'catalog_unavailable'], 503);
     }

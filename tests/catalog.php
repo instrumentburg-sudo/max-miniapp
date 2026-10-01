@@ -15,11 +15,20 @@ if (isset($argv[1]) && in_array($argv[1], ['repair', 'rent'], true)) {
 
 $cases = [
     ['', null],
+    ['Без залога', 0.0],
+    ['<p>Описание товара</p><p><b>Без залога</b></p>', 0.0],
+    ['Без залога. Залог: 0 ₽', 0.0],
+    ['Без залога. Залог: 5000 ₽', null],
+    ['Не без залога.', null],
+    ['<!-- Залог: 5000 ₽ -->', null],
+    ['<script>Залог: 5000 ₽</script>', null],
+    ['<style>Залог: 5000 ₽</style>', null],
+    ['<p>Залог: 0 ₽</p><p>Какой залог? Залог по этой позиции: 0 ₽.</p>', null],
     ['Залог возвращается после проверки инструмента.', null],
     ['Без залога для жителей Екатеринбурга.', null],
     ['<p>Залог возвращается.</p><p>Залог: 5000 ₽</p>', 5000.0],
     ['&lt;p&gt;Залог: &lt;b&gt;5&nbsp;000&lt;/b&gt; ₽&lt;/p&gt;', 5000.0],
-    ['Залог: 0 ₽', 0.0],
+    ['Залог: 0 ₽', null],
     ['ЗАЛОГ: 12 500,50 руб.', 12500.5],
     ['Залог: уточните у менеджера', null],
     ['Залог: -100 ₽', null],
@@ -34,6 +43,14 @@ $cases = [
 foreach ($cases as [$description, $expected]) {
     if (catalog_deposit($description) !== $expected) throw new RuntimeException('Deposit mismatch: ' . $description);
 }
+foreach ([null, 1, 2] as $version) {
+    $old = ['catalogVersion'=>$version, 'items'=>[['id'=>1,'deposit'=>0],['id'=>2,'deposit'=>5000],['id'=>3]]];
+    foreach (catalog_cached_deposits($old)['items'] as $item) {
+        if ($item['deposit'] !== null) throw new RuntimeException('Old cache retained unverified deposit');
+    }
+}
+$current = ['catalogVersion'=>3, 'items'=>[['deposit'=>0],['deposit'=>5000],['deposit'=>null]]];
+if (catalog_cached_deposits($current) !== $current) throw new RuntimeException('Verified cache changed');
 $row = ['product_id'=>'42', 'model'=>' 012E ', 'name'=>'012E Лобзик Makita', 'category_id'=>'200', 'price'=>'600', 'quantity'=>'1', 'image'=>'tools/makita.jpg', 'keyword'=>'arenda-lobzika', 'description'=>'Залог: 5000 ₽'];
 $thumbCalls = [];
 $thumbnail = static function ($path) use (&$thumbCalls) { $thumbCalls[] = $path; return 'https://instrumentburg.ru/image/cache/tools/makita-400x400.jpg'; };
