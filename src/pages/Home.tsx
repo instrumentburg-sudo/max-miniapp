@@ -5,7 +5,7 @@ import { IconArrow, IconBox, IconCrane, IconPhone, IconPin, IconSearch, IconWren
 const JOBS = [
   { idx: '01', title: 'Мои заказы', sub: 'Ремонты и аренды на вашем номере', icon: IconBox, to: '/orders' },
   { idx: '02', title: 'Статус по номеру', sub: 'Если заказ оформлен на другой номер', icon: IconSearch, to: '/order' },
-  { idx: '03', title: 'Каталог аренды', sub: 'Актуальные цены на сайте', icon: IconCrane, to: 'https://instrumentburg.ru/arenda-instrumenta' },
+  { idx: '03', title: 'Каталог аренды', sub: 'Выбор инструмента и предзаявка', icon: IconCrane, to: '/catalog' },
   { idx: '04', title: 'Запись на ремонт', sub: 'Бесплатная диагностика', icon: IconWrench, to: '/repair' },
 ] as const;
 

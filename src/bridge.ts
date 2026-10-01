@@ -85,9 +85,30 @@ export function getUser(): WebAppUser | undefined {
   return getWebApp()?.initDataUnsafe?.user;
 }
 
+// Capture launch markers before React navigation can remove query/hash.
+// They indicate a new MAX launch, but are never themselves an auth source.
+const explicitMaxLaunch = [window.location.search, window.location.hash].some(part =>
+  Array.from(new URLSearchParams(part.replace(/^[?#]/, '')).keys()).some(key =>
+    /WebAppData|WebAppPlatform|initData|auth_date/i.test(key)));
+
 /** Get initData string for server-side validation */
 export function getInitData(): string {
-  return getWebApp()?.initData ?? '';
+  const live = getWebApp()?.initData ?? '';
+  if (explicitMaxLaunch && !live) {
+    try { sessionStorage.removeItem('ib_max_init'); } catch { /* storage disabled */ }
+    return '';
+  }
+  // Only same-origin sessionStorage; raw authentication is never put in a URL.
+  let value = live;
+  try { value ||= sessionStorage.getItem('ib_max_init') || ''; } catch { /* storage disabled */ }
+  const date = Number(new URLSearchParams(value).get('auth_date'));
+  const now = Date.now() / 1000;
+  if (!Number.isFinite(date) || !date || date > now + 60 || now - date > 3600) {
+    try { sessionStorage.removeItem('ib_max_init'); } catch { /* storage disabled */ }
+    return '';
+  }
+  try { sessionStorage.setItem('ib_max_init', value); } catch { /* live bridge still works */ }
+  return value;
 }
 
 /** Haptic tap feedback */
@@ -112,7 +133,9 @@ export function signalReady(): void {
 
 /** Open external link in browser */
 export function openExternal(url: string): void {
-  getWebApp()?.openLink(url);
+  const app = getWebApp();
+  if (app?.openLink) app.openLink(url);
+  else window.location.assign(url);
 }
 
 /** Check if running inside MAX */

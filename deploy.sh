@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy MAX Mini App to NetAngels (h31.netangels.ru)
-# Usage: ./deploy.sh [--api-only | --frontend-only]
+# Usage: ./deploy.sh [--api-only | --frontend-only | --cabinet-artifact]
 set -euo pipefail
 
 SSH_HOST="c50684@h31.netangels.ru"
@@ -10,11 +10,24 @@ LOCAL_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 mode="${1:-all}"
 
+# Local artifact only. The self-service deploy copies it after monorepo rollout.
+if [[ "$mode" == "--cabinet-artifact" ]]; then
+  cd "$LOCAL_DIR"
+  VITE_BASE_PATH=/cabinet/ npm run build
+  cp deploy/cabinet.htaccess dist-cabinet/.htaccess
+  git rev-parse HEAD > dist-cabinet/.build-sha
+  node --input-type=module -e 'import fs from "node:fs"; fs.writeFileSync("dist-cabinet/version.json", JSON.stringify({sha:fs.readFileSync("dist-cabinet/.build-sha","utf8").trim(),base:"/cabinet/"})+"\n")'
+  rm dist-cabinet/.build-sha
+  echo "Cabinet artifact: $LOCAL_DIR/dist-cabinet"
+  exit 0
+fi
+case "$mode" in all|--frontend-only|--api-only) ;; *) echo "Unknown mode: $mode" >&2; exit 2 ;; esac
+
 # ─── Frontend ───
 if [[ "$mode" == "all" || "$mode" == "--frontend-only" ]]; then
   echo "==> Building frontend..."
   cd "$LOCAL_DIR"
-  npm run build
+  VITE_BASE_PATH=/max-app/ npm run build
 
   echo "==> Deploying frontend to $SSH_HOST:$REMOTE_WEB/"
   ssh "$SSH_HOST" "mkdir -p $REMOTE_WEB"

@@ -821,18 +821,12 @@ function respond_to_order_query(int $userId, string $rawText): void
     );
 }
 
-function process_bot_update(array $update): void
+function process_bot_update(array $update, ?callable $respond = null): void
 {
     $updateType = (string)($update['update_type'] ?? '');
 
-    // bot_started carries the user at the top level, not inside a message.
-    if ($updateType === 'bot_started') {
-        $userId = $update['user_id'] ?? ($update['user']['user_id'] ?? null);
-        if ($userId !== null && is_numeric($userId)) {
-            respond_to_order_query((int)$userId, '');
-        }
-        return;
-    }
+    // Convex alone owns bot_started, contact and /start replies.
+    if ($updateType === 'bot_started') return;
 
     if ($updateType !== 'message_created') {
         // message_callback, message_edited, etc. are outside this webhook's scope.
@@ -853,7 +847,13 @@ function process_bot_update(array $update): void
     $body = $message['body'] ?? null;
     $text = is_array($body) ? (string)($body['text'] ?? '') : '';
 
-    respond_to_order_query((int)$userId, $text);
+    foreach ((is_array($body) ? ($body['attachments'] ?? []) : []) as $attachment) {
+        // Ignore even when the contact has a caption containing an order number.
+        if (($attachment['type'] ?? '') === 'contact') return;
+    }
+    $trimmed = trim($text);
+    if ($trimmed === '' || preg_match('/^(?:\/start(?:@\S+)?|start)(?:[\s=]|$)/iu', $trimmed)) return;
+    ($respond ?? 'respond_to_order_query')((int)$userId, $text);
 }
 
 function handle_bot_webhook(): void
@@ -1012,6 +1012,9 @@ function handle_legacy_debug(): void
 
 function handle_repair()
 {
+    if (env('MAX_LEGACY_TELEGRAM_ENABLED') !== '1') {
+        json_response(['error' => 'legacy_disabled', 'message' => 'Оформите предзаявку на https://zayavka.instrumentburg.ru/repair.html'], 410);
+    }
     $body = get_json_body();
 
     // Validation
@@ -1177,6 +1180,9 @@ function handle_convex_proxy(string $upstreamPath): void
 
 // --- Main ------------------------------------------------------------------
 
+// Unit tests load pure dispatch logic without env, HTTP routing or sends.
+if (defined('MAX_API_TEST_MODE') && MAX_API_TEST_MODE) return;
+
 load_env();
 handle_cors();
 
@@ -1220,10 +1226,13 @@ if ($method === 'POST' && $path === '/bot/webhook') {
 
 // Legacy routes — recovered from prod, see header comment.
 if ($method === 'POST' && $path === '/webhook') {
+    // Preserve code for explicit emergency use, never automatically fall back.
+    if (env('MAX_LEGACY_WEBHOOK_ENABLED') !== '1') json_response(['ok' => true]);
     handle_legacy_webhook();
 }
 
 if ($method === 'POST' && $path === '/debug') {
+    if (env('MAX_LEGACY_WEBHOOK_ENABLED') !== '1') json_response(['ok' => true]);
     handle_legacy_debug();
 }
 

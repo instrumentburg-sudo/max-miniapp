@@ -5,7 +5,7 @@ import { Home } from './pages/Home';
 import { OrderStatus } from './pages/OrderStatus';
 import { LinkAccount } from './pages/LinkAccount';
 import { MyOrders } from './pages/MyOrders';
-import { RepairRequest } from './pages/RepairRequest';
+import { IntakeEntry } from './pages/IntakeEntry';
 import { OrderCard } from './pages/OrderCard';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -62,7 +62,7 @@ export function App() {
 
   return (
     <ErrorBoundary>
-      <BrowserRouter basename="/max-app">
+      <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
         <BackButtonManager />
         <div className="app">
           <Routes>
@@ -71,7 +71,11 @@ export function App() {
             <Route path="/link" element={<LinkAccount />} />
             <Route path="/orders" element={<MyOrders />} />
             <Route path="/orders/:number" element={<OrderCard />} />
-            <Route path="/repair" element={<RepairRequest />} />
+            <Route path="/catalog/:id" element={<IntakeEntry kind="rent" />} />
+            <Route path="/catalog" element={<IntakeEntry kind="rent" />} />
+            <Route path="/rent" element={<IntakeEntry kind="rent" />} />
+            <Route path="/rental" element={<IntakeEntry kind="rent" />} />
+            <Route path="/repair" element={<IntakeEntry kind="repair" />} />
           </Routes>
         </div>
       </BrowserRouter>

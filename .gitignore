@@ -7,3 +7,6 @@ __pycache__/
 api-php/.env
 *.log
 .DS_Store
+
+# Local alternate build for self-service deployment
+dist-cabinet/

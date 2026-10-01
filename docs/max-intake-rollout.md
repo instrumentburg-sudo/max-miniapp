@@ -1,0 +1,19 @@
+# MAX intake, этап 1
+
+Кабинет и карточки LS сохранены. Отдельный список предзаявок обращается к `/api/intake/max-list`; его ошибка не мешает LS. На старом origin кнопки ремонта и аренды открывают обычный сайт с честным пояснением: аккаунт MAX при переходе не передаётся. После смены URL MAX общие формы и кабинет живут на одном origin. Авторизация хранится только в sessionStorage `ib_max_init` с проверкой auth_date (1 час); сервер проверяет подпись.
+
+Выкат выполняется только после разрешённого push/деплоя монорепо:
+
+1. Влить согласованный miniapp commit в master. Штатный `./deploy.sh` выкладывает `/max-app` и PHP. Проверить кабинет по старому URL.
+2. Из master `./deploy.sh --cabinet-artifact` создаёт локальный `dist-cabinet`, включая `version.json` (`sha`, `base`). Команда не публикует файлы. Передать абсолютный путь `CABINET_DIST` скрипту self-service. Там nginx `/cabinet/` даёт SPA fallback, `/max-api/order/` проксирует read-only lookup на старый PHP. Для кабинета сохранён production same-origin `/max-api/cvx`: whitelist POST `/api/max/link`, `/api/max/orders`, `/api/max/order`, `/api/outcome`, `/api/pay` и GET `/api/order` (с префиксом `/max-api/cvx`).
+3. После публикации и проверки общего сайта в кабинете бизнеса MAX открыть бота `id662337117117_bot`, настройки мини-приложения и заменить URL `https://instrumentburg.ru/max-app/` на `https://zayavka.instrumentburg.ru/`. Название поля зависит от интерфейса MAX; требуется действие владельца. Старый `/max-app` остаётся рабочим кабинетом.
+4. Проверить запуск `https://max.ru/id662337117117_bot?startapp`, входы `?startapp=repair` и `?startapp=rent`, возврат в `/cabinet/orders`. Не отправлять тестовую заявку на production.
+
+PHP `/bot/webhook` отвечает только на свободный текст/номер. `bot_started`, `/start` и contact (даже с caption) принадлежат Convex. Подписки не изменены. Старые `/webhook` и `/debug` отключены; явный аварийный флаг `MAX_LEGACY_WEBHOOK_ENABLED=1` возвращает старый обработчик. Не включать одновременно с ответчиком Convex. Telegram `/repair` сохранён за `MAX_LEGACY_TELEGRAM_ENABLED=1`; по умолчанию 410, автоматического fallback нет. Старая форма React сохранена в исходниках как аварийный резерв, основной маршрут ведёт на общий intake.
+
+Проверки интегратора: `npm ci`, `npm run build`, `./deploy.sh --cabinet-artifact`, `npx tsc --noEmit`, `php -l api-php/index.php`, `php tests/webhook.php`. Браузер: 390/1440, mock Bridge с актуальным auth_date, Z-ошибка/зависший запрос при успешном LS и наоборот, отказ/просроченная сессия, переходы `/repair`, `/catalog`, `/rent`, `/rental`, `/orders/:number`. PHP тест использует callback, не вызывает сеть, не загружает production env.
+
+Кабинетная сборка соблюдает CSP общего сайта: Google Fonts исключены, используются committed локальные woff2 с системными fallback-шрифтами; bootstrap CSS/JS вынесены в локальные ассеты. Default `/max-app` HTML не меняется. Ссылка Z проверяется по HTTPS origin/path `/z.html` и на том же origin открывается внутри WebView. Старые `/catalog/:id` ведут в общую аренду с `product` (только допустимый идентификатор). PHP также подавляет `/start=token`.
+
+
+Baseline provenance: ветка создана от origin/master `45637db`. По сравнению с уже действующим committed prod отсутствовали три коммита. Включены cherry-pick только зафиксированных коммитов основного checkout, без его dirty файлов: `5dc0f5e` → `84f70b5` (локальные шрифты), `aae2773` → `9779beb` (same-origin Convex PHP proxy), `dd8ebcb` → `63feac3` (OG). Перед переносом feature tracked diff сохранён бинарным patch `../mini-feature.patch`, затем применён обратно через `git apply --3way` без конфликтов; untracked feature файлы сохранены. Feature ещё не закоммичен.

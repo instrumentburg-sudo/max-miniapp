@@ -1,0 +1,49 @@
+@font-face{font-family:'Alumni Sans';font-style:normal;font-weight:700 800;font-display:swap;src:url(/fonts/alumni-sans-cyrillic.woff2) format('woff2');unicode-range:U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116}
+      @font-face{font-family:'Alumni Sans';font-style:normal;font-weight:700 800;font-display:swap;src:url(/fonts/alumni-sans-latin.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+      @font-face{font-family:'Golos Text';font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/golos-text-cyrillic.woff2) format('woff2');unicode-range:U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116}
+      @font-face{font-family:'Golos Text';font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/golos-text-latin.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+      @font-face{font-family:'Martian Mono';font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/martian-mono-cyrillic.woff2) format('woff2');unicode-range:U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116}
+      @font-face{font-family:'Martian Mono';font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/martian-mono-latin.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+      body {
+        margin: 0;
+        background: #E9E3D6;
+        color: #17150F;
+        font-family: 'Golos Text', system-ui, sans-serif;
+      }
+      #loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        gap: 18px;
+      }
+      #loading .mark {
+        width: 34px;
+        height: 34px;
+        border: 2px solid #17150F;
+        border-top-color: #E33B00;
+        border-radius: 50%;
+        animation: spin 0.9s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      #loading .text {
+        font-family: 'Martian Mono', ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: #6E685B;
+      }
+      #error-box {
+        display: none;
+        padding: 14px 16px;
+        margin: 16px;
+        background: #F4F0E6;
+        border: 1px solid #A81C12;
+        border-left-width: 4px;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        line-height: 1.5;
+        color: #A81C12;
+        word-break: break-all;
+      }

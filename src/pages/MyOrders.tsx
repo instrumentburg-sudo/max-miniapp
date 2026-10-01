@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { hapticError, hapticTap, hasInitData, openExternal } from '../bridge';
+import { hapticError, hapticTap, hasInitData } from '../bridge';
 import { ApiError, fetchMyOrders, NetworkError, type ClientOrder } from '../api';
+import { IntakeRequests } from '../components/IntakeRequests';
 import { Screen } from '../components/Screen';
 import { TicketRow } from '../components/Ticket';
 
@@ -84,6 +85,7 @@ function Section({
 export function MyOrders() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [linked, setLinked] = useState(true);
   const [orders, setOrders] = useState<ClientOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Счётчик перезапускает эффект: WebView MAX умеет терять запрос по дороге,
@@ -106,11 +108,13 @@ export function MyOrders() {
     fetchMyOrders()
       .then((res) => {
         if (cancelled) return;
-        // Связки нет — показывать нечего, отправляем привязываться.
+        // Связки LS нет — оставляем доступным независимый список Z.
         if (!res.linked) {
-          navigate('/link', { replace: true });
+          setLinked(false);
+          setOrders([]);
           return;
         }
+        setLinked(true);
         setOrders(res.orders);
       })
       .catch((e: unknown) => {
@@ -144,6 +148,7 @@ export function MyOrders() {
   if (loading) {
     return (
       <Screen eyebrow="Личный кабинет" title="Мои заказы">
+        <IntakeRequests />
         <div className="section__list">
           <TicketSkeleton />
           <TicketSkeleton />
@@ -155,6 +160,7 @@ export function MyOrders() {
   if (error) {
     return (
       <Screen eyebrow="Личный кабинет" title="Мои заказы">
+        <IntakeRequests />
         <div className="link__stack">
           <div className="note note--error">
             <span className="note__head">Не получилось</span>
@@ -178,7 +184,9 @@ export function MyOrders() {
 
   return (
     <Screen eyebrow="Личный кабинет" title="Мои заказы">
-      {repairs.length === 0 && rentals.length === 0 && (
+        <IntakeRequests />
+      {!linked && <button className="btn btn--primary" onClick={() => navigate('/link')}>Подтвердить телефон для заказов</button>}
+      {linked && repairs.length === 0 && rentals.length === 0 && (
         <div className="empty">
           <div className="empty__mark">00</div>
           <p className="empty__text">
@@ -187,7 +195,7 @@ export function MyOrders() {
           </p>
           <button
             className="btn btn--ghost"
-            onClick={() => openExternal('https://instrumentburg.ru/arenda-instrumenta')}
+            onClick={() => navigate('/catalog')}
           >
             Каталог аренды на сайте
           </button>

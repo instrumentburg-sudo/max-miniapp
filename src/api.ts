@@ -1,6 +1,6 @@
 import { getInitData } from './bridge';
 
-const API_BASE = import.meta.env.DEV ? '/max-api' : '/max-api';
+const API_BASE = '/max-api'; // Cabinet host proxies read-only order lookup to the existing PHP API.
 
 interface ApiOptions {
   method?: 'GET' | 'POST';
@@ -332,4 +332,30 @@ export function createSbpPayment(token: string, selectedUpsellIndexes?: number[]
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, mode: 'full', selectedUpsellIndexes }),
   });
+}
+
+
+export interface IntakeRequest {
+  number: string;
+  kind: string;
+  title: string;
+  status: string;
+  status_url: string;
+  created_at: number;
+}
+
+/** Independent of the LiveSklad order list; a held request has a deadline. */
+export async function fetchIntakeRequests(): Promise<{ requests: IntakeRequest[] }> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const base = window.location.hostname === 'zayavka.instrumentburg.ru' ? '' : 'https://zayavka.instrumentburg.ru';
+  try {
+    const res = await fetch(`${base}/api/intake/max-list`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: getInitData() }),
+      signal: controller.signal, cache: 'no-store',
+    });
+    if (!res.ok) throw new ApiError(res.status, null);
+    return await res.json();
+  } finally { window.clearTimeout(timer); }
 }
