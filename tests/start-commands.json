@@ -2,126 +2,187 @@
   {
     "text": "/start",
     "start": true,
-    "payload": null
+    "payload": null,
+    "legacy": true
   },
   {
     "text": "start",
     "start": true,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": "/START",
     "start": true,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": " /start",
     "start": true,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": "Start",
     "start": true,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": "/start@id662337117117_bot=token",
     "start": true,
-    "payload": "token"
+    "payload": "token",
+    "legacy": false
   },
   {
     "text": "/start token",
     "start": true,
-    "payload": "token"
+    "payload": "token",
+    "legacy": true
   },
   {
     "text": " start@BOT = token ",
     "start": true,
-    "payload": "token"
+    "payload": "token",
+    "legacy": false
   },
   {
     "text": "/START\tTOKEN",
     "start": true,
-    "payload": "TOKEN"
+    "payload": "TOKEN",
+    "legacy": false
   },
   {
     "text": "/start\nabc",
     "start": true,
-    "payload": "abc"
+    "payload": "abc",
+    "legacy": true
   },
   {
     "text": "/start=abc extra",
     "start": true,
-    "payload": "abc"
+    "payload": "abc",
+    "legacy": true
   },
   {
     "text": " /start token ",
     "start": true,
-    "payload": "token"
+    "payload": "token",
+    "legacy": false
   },
   {
     "text": "﻿/start=abc﻿",
     "start": true,
-    "payload": "abc"
+    "payload": "abc",
+    "legacy": false
   },
   {
     "text": "/start=",
     "start": false,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": "A023222",
     "start": false,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": "Здравствуйте",
     "start": false,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": "/starting",
     "start": false,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": "starter",
     "start": false,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": "/start@",
     "start": false,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": "/start@bot!",
     "start": false,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": "/start-token",
     "start": false,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": "restart",
     "start": false,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": "x /start",
     "start": false,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": "",
     "start": false,
-    "payload": null
+    "payload": null,
+    "legacy": false
   },
   {
     "text": "   ",
     "start": false,
-    "payload": null
+    "payload": null,
+    "legacy": false
+  },
+  {
+    "text": "/start﻿token",
+    "start": true,
+    "payload": "token",
+    "legacy": true
+  },
+  {
+    "text": "/starttoken",
+    "start": true,
+    "payload": "token",
+    "legacy": false
+  },
+  {
+    "text": "/start",
+    "start": true,
+    "payload": null,
+    "legacy": false
+  },
+  {
+    "text": "/start tokenrest",
+    "start": true,
+    "payload": "token",
+    "legacy": true
+  },
+  {
+    "text": "/start",
+    "start": true,
+    "payload": null,
+    "legacy": false
+  },
+  {
+    "text": "/START﻿TOKEN",
+    "start": true,
+    "payload": "TOKEN",
+    "legacy": false
   }
 ]

@@ -83,7 +83,7 @@ with open(os.environ['MOCK_LOG'], 'a') as f: f.write(json.dumps(['scp'] + sys.ar
     result = run(['bash', str(REPO/'deploy.sh'), '--handoff-only'], env)
     patched = (root/'www/max-api/index.php').read_text()
     assert "function dirty_catalog_handler()" in patched
-    assert "IB_MAX_OWNERSHIP_GUARD_V1" in patched
+    assert "IB_MAX_OWNERSHIP_GUARD_V2" in patched
     assert (root/'www/max-api/dirty-catalog.php').read_text() == '<?php /* server only */\n'
     run(['bash', str(REPO/'deploy.sh'), '--handoff-only'], env)
     assert (root/'www/max-api/index.php').read_text() == patched  # idempotent
@@ -93,17 +93,17 @@ with open(os.environ['MOCK_LOG'], 'a') as f: f.write(json.dumps(['scp'] + sys.ar
 require $argv[1];
 $fixtures = json_decode(file_get_contents($argv[2]), true, 512, JSON_THROW_ON_ERROR);
 foreach ($fixtures as $fixture) {
- if (ib_handoff_is_start($fixture['text']) !== $fixture['start']) { fwrite(STDERR, 'Fixture mismatch: ' . json_encode($fixture)); exit(3); }
+ if (ib_handoff_is_start($fixture['text']) !== $fixture['legacy']) { fwrite(STDERR, 'Fixture mismatch: ' . json_encode($fixture)); exit(3); }
 }
 $GLOBALS['calls'] = [];
-foreach (['/start', 'start', '/START', ' /start', '/start@id662337117117_bot=token'] as $text) {
+foreach (['/start', '/start token', '/start=token'] as $text) {
  process_bot_update(['update_type'=>'message_created','message'=>['body'=>['text'=>$text]]]);
 }
 process_bot_update(['update_type'=>'bot_started']);
-process_bot_update(['update_type'=>'message_created','message'=>['body'=>['text'=>'A023222','attachments'=>[['type'=>'contact']]]]]);
+process_bot_update(['update_type'=>'message_created','message'=>['body'=>['text'=>'A023222','attachments'=>[['type'=>'contact','payload'=>['vcf_info'=>'signed','hash'=>'hash']]]]]]);
 if (count($GLOBALS['calls']) !== 0) exit(1);
-foreach (['A023222', '/starting', 'Здравствуйте'] as $text) process_bot_update(['update_type'=>'message_created','message'=>['body'=>['text'=>$text]]]);
-if (count($GLOBALS['calls']) !== 3) exit(2);
+foreach (['A023222', '/starting', 'Здравствуйте', 'start', '/START', ' /start', '/start@bot=token'] as $text) process_bot_update(['update_type'=>'message_created','message'=>['body'=>['text'=>$text]]]);
+if (count($GLOBALS['calls']) !== 7) exit(2);
 ''')
     run(['php', str(probe), str(root/'www/max-api/index.php'), str(REPO/'tests/start-commands.json')])
     # Exact restore removes newly added files, and recovers hidden/dirty files.

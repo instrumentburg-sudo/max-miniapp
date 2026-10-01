@@ -59,25 +59,48 @@ case "$action" in
     done
     # Preserve the replaced deployment; do not overlay, which would leave new handlers.
     displaced="$(mktemp -d "$backups/replaced-XXXXXXXX")"
+    # Each move must be a filesystem rename, not copy+delete across mounts.
+    device="$(stat -c %d "$web")"
+    for path in "$stage" "$displaced" "$web/max-app" "$web/max-api"; do
+      [[ "$(stat -c %d "$path")" = "$device" ]] || { echo 'Restore requires a single filesystem for atomic directory moves' >&2; exit 1; }
+    done
+    echo "RESTORE_STAGE=$stage"
+    echo "RESTORE_DISPLACED=$displaced"
     rollback_partial() {
-      result=$?
+      local result=$?
+      # Do not recurse through EXIT, and ignore repeated disconnect/termination
+      # signals throughout recovery. External mv inherits ignored signals too.
+      trap '' HUP INT TERM
+      trap - EXIT
       if (( result != 0 )); then
         for name in max-app max-api; do
           if [[ -d "$displaced/$name" ]]; then
-            if [[ -e "$web/$name" ]]; then mv -- "$web/$name" "$stage/failed-$name"; fi
-            mv -- "$displaced/$name" "$web/$name"
+            if [[ -e "$web/$name" ]]; then
+              if ! mv -- "$web/$name" "$stage/failed-$name"; then
+                echo "Rollback could not move $web/$name aside; saved original: $displaced/$name" >&2
+                continue
+              fi
+            fi
+            if ! mv -- "$displaced/$name" "$web/$name"; then
+              echo "Rollback needs manual recovery: $displaced/$name -> $web/$name" >&2
+            fi
           fi
         done
       fi
       exit "$result"
     }
     trap rollback_partial EXIT
+    # A signal trap exits nonzero, invoking the same EXIT rollback as a failed
+    # move. Disable further signals before exit so recovery cannot be interrupted.
+    trap 'trap "" HUP INT TERM; exit 129' HUP
+    trap 'trap "" HUP INT TERM; exit 130' INT
+    trap 'trap "" HUP INT TERM; exit 143' TERM
     for name in max-app max-api; do
       mv -- "$web/$name" "$displaced/$name"
       mv -- "$stage/$name" "$web/$name"
     done
     tar -dzf "$archive" -C "$web"
-    trap - EXIT
+    trap - EXIT HUP INT TERM
     rmdir "$stage"
     echo "RESTORED_ARCHIVE=$archive"
     echo "REPLACED_DEPLOYMENT=$displaced"

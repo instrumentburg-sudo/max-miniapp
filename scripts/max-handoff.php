@@ -3,32 +3,37 @@ declare(strict_types=1);
 // Narrow ownership patch only; never replaces the server file with the git copy.
 function handoff_source(string $source): string {
     $helper = <<<'PATCH'
-// BEGIN IB_MAX_OWNERSHIP_HANDOFF_V1
+// BEGIN IB_MAX_OWNERSHIP_HANDOFF_V2
 function ib_handoff_is_start(string $text): bool
 {
-    $text = preg_replace('/^[\s\x{FEFF}]+|[\s\x{FEFF}]+$/u', '', $text) ?? $text;
-    return preg_match('/^(?:\/start|start)(?:@[A-Za-z0-9_]+)?(?:[\s=]+(\S+))?(?=\s|$)/iu', $text) === 1;
+    // Frozen origin/master 1bb24212: no trim, no case/@bot expansion.
+    // Explicit common whitespace, with historical JS NEL exception at this boundary.
+    $ws = '\x{0009}-\x{000D}\x{0020}\x{0085}\x{00A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}';
+    $legacyWs = str_replace('\x{0085}', '', $ws);
+    return preg_match('/^\/start(?:[ =]([^' . $legacyWs . ']+))?(?=[' . $legacyWs . ']|$)/u', $text) === 1;
 }
-// END IB_MAX_OWNERSHIP_HANDOFF_V1
+// END IB_MAX_OWNERSHIP_HANDOFF_V2
 
 PATCH;
     $guard = <<<'PATCH'
 
-    // BEGIN IB_MAX_OWNERSHIP_GUARD_V1
+    // BEGIN IB_MAX_OWNERSHIP_GUARD_V2
     if (($update['update_type'] ?? '') === 'bot_started') return;
     if (($update['update_type'] ?? '') === 'message_created') {
         $ibBody = $update['message']['body'] ?? [];
         if (is_array($ibBody)) {
             foreach (($ibBody['attachments'] ?? []) as $ibAttachment) {
-                if (is_array($ibAttachment) && ($ibAttachment['type'] ?? '') === 'contact') return;
+                if (is_array($ibAttachment) && ($ibAttachment['type'] ?? '') === 'contact'
+                    && is_string($ibAttachment['payload']['vcf_info'] ?? null)
+                    && is_string($ibAttachment['payload']['hash'] ?? null)) return;
             }
             if (ib_handoff_is_start((string)($ibBody['text'] ?? ''))) return;
         }
     }
-    // END IB_MAX_OWNERSHIP_GUARD_V1
+    // END IB_MAX_OWNERSHIP_GUARD_V2
 
 PATCH;
-    if (str_contains($source, 'IB_MAX_OWNERSHIP_HANDOFF_V1') || str_contains($source, 'ib_handoff_is_start')) {
+    if (str_contains($source, 'IB_MAX_OWNERSHIP_HANDOFF_V2') || str_contains($source, 'ib_handoff_is_start')) {
         if (substr_count($source, $helper) === 1 && substr_count($source, $guard) === 1) return $source;
         throw new RuntimeException('Unknown existing ownership patch; inspect manually');
     }

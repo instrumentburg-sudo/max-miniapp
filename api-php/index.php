@@ -821,19 +821,49 @@ function respond_to_order_query(int $userId, string $rawText): void
     );
 }
 
-/** Same grammar as Convex parseMaxStartCommand; see tests/start-commands.json. */
+/** Explicit shared Unicode set; the legacy boundary deliberately excludes NEL. */
+const MAX_COMMAND_WHITESPACE = '\x{0009}-\x{000D}\x{0020}\x{0085}\x{00A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}';
 function max_start_command(string $text): ?array
 {
-    // Match JS trim for Unicode whitespace too, including NBSP and BOM.
-    $text = preg_replace('/^[\s\x{FEFF}]+|[\s\x{FEFF}]+$/u', '', $text) ?? $text;
-    return preg_match('/^(?:\/start|start)(?:@[A-Za-z0-9_]+)?(?:[\s=]+(\S+))?(?=\s|$)/iu', $text, $match) ? $match : null;
+    $ws = MAX_COMMAND_WHITESPACE;
+    $text = preg_replace('/^[' . $ws . ']+|[' . $ws . ']+$/u', '', $text) ?? $text;
+    return preg_match('/^(?:\/start|start)(?:@[A-Za-z0-9_]+)?(?:[' . $ws . '=]+([^' . $ws . ']+))?(?=[' . $ws . ']|$)/iu', $text, $match) ? $match : null;
+}
+function max_legacy_start_command(string $text): ?array
+{
+    $ws = str_replace('\x{0085}', '', MAX_COMMAND_WHITESPACE);
+    return preg_match('/^\/start(?:[ =]([^' . $ws . ']+))?(?=[' . $ws . ']|$)/u', $text, $match) ? $match : null;
 }
 
-function process_bot_update(array $update, ?callable $respond = null): void
+/** Pure envelope builder is also exercised by the PHP/Convex transport tests. */
+function max_forward_start_envelope(array $update, string $token, string $timestamp): array
+{
+    if ($token === '') throw new RuntimeException('MAX forwarding is not configured');
+    $raw = json_encode($update, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    $signature = hash_hmac('sha256', "ib-max-start-v1\n" . $timestamp . "\n" . $raw, $token);
+    return ['body' => $raw, 'headers' => ['Content-Type: application/json', 'X-IB-Max-Forward: v1', 'X-IB-Max-Timestamp: ' . $timestamp, 'X-IB-Max-Signature: ' . $signature]];
+}
+
+/** Sign the exact bytes sent. This request is never retried or given a generic bot fallback. */
+function max_forward_start(array $update): void
+{
+    if (defined('MAX_API_TEST_MODE') && MAX_API_TEST_MODE) throw new RuntimeException('Inject a forwarding callback in tests');
+    $request = max_forward_start_envelope($update, env('MAX_BOT_TOKEN'), (string)time());
+    $ch = curl_init('https://proper-wren-188.convex.site/max/webhook');
+    curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $request['body'], CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => $request['headers'],
+        CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_TIMEOUT => 20, CURLOPT_FOLLOWLOCATION => false]);
+    $response = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($response === false || $status !== 200) throw new RuntimeException('MAX forwarding failed');
+}
+
+function process_bot_update(array $update, ?callable $respond = null, ?callable $forward = null): void
 {
     $updateType = (string)($update['update_type'] ?? '');
 
-    // Convex alone owns bot_started, contact and /start replies.
+    // Direct Convex owns legacy starts/contact; this release forwards extended starts.
     if ($updateType === 'bot_started') return;
 
     if ($updateType !== 'message_created') {
@@ -860,7 +890,14 @@ function process_bot_update(array $update, ?callable $respond = null): void
         if (($attachment['type'] ?? '') === 'contact') return;
     }
     $trimmed = trim($text);
-    if ($trimmed === '' || max_start_command($text) !== null) return;
+    if ($trimmed === '' || max_legacy_start_command($text) !== null) return;
+    if (max_start_command($text) !== null) {
+        // Older read-only probes inject only the response spy. In test mode it
+        // records a PHP-owned dispatch attempt, never an actual bot HTTP send.
+        if ($forward === null && $respond !== null && defined('MAX_API_TEST_MODE') && MAX_API_TEST_MODE) $respond((int)$userId, $text);
+        else ($forward ?? 'max_forward_start')($update);
+        return;
+    }
     ($respond ?? 'respond_to_order_query')((int)$userId, $text);
 }
 
