@@ -24,7 +24,11 @@ with sync_playwright() as p:
     r.fulfill(body='')
    c.route('**/*',route);page=c.new_page();page.on('pageerror',lambda e:errors.append(str(e)))
    page.goto('https://zayavka.instrumentburg.ru/rent.html?product=42');expect(page.locator('#quote')).to_contain_text('600 ₽');expect(page.locator('#quote')).to_contain_text('3 000 ₽')
-   if case=='eligible':expect(page.locator('#rental-loyalty-hint')).to_be_visible()
+   if case=='eligible':
+    expect(page.locator('#rental-loyalty-hint')).to_be_visible()
+    expect(page.locator('#rental-loyalty-hint')).to_contain_text('Право рассчитано автоматически по истории аренд')
+    expect(page.locator('#rental-loyalty-hint')).to_contain_text('сотрудник проверит стоимость техники')
+    expect(page.locator('#rental-loyalty-hint')).not_to_contain_text('подтвердит сотрудник')
    else:expect(page.locator('#rental-loyalty-hint')).to_have_count(0)
    if case=='site':assert not calls
    assert not errors,errors

@@ -17,9 +17,9 @@ with sync_playwright() as p:
      path=urlparse(r.request.url).path
      if '/api/max/loyalty' in path:
       assert r.request.post_data_json['initData']
-      data={'enabled':True,'linked':True,'completed_rentals':2 if case=='two' else 3,'eligible':case=='eligible','blocking_reasons':['Нужна сверка задолженности'] if case=='blocked' else [],'history_complete':False,'checked_at':1790899200000,'rule_version':'v1','history':[{'order_id':'old-outside-search','closed_at':'2025-07-01','rental_amount_kopecks':120000,'completed':True,'reasons':[]}]}
+      data={'enabled':True,'linked':True,'completed_rentals':2 if case=='two' else 3,'eligible':case=='eligible','blocking_reasons':['Нет данных о расчёте'] if case=='blocked' else [],'history_complete':case=='eligible','checked_at':1790899200000,'rule_version':'v1','history':[{'order_id':'old-outside-search','closed_at':'2025-07-01','rental_amount_kopecks':120000,'completed':True,'reasons':[]}]}
       if case=='off': data={'enabled':False}
-      if case=='ambiguous':data.update(completed_rentals=0,eligible=False,history=[],blocking_reasons=['Телефон связан с несколькими клиентами. Нужна проверка сотрудника.'])
+      if case=='ambiguous':data.update(completed_rentals=0,eligible=False,history=[],blocking_reasons=['Телефон связан с несколькими клиентами. Право автоматически не определено.'])
       r.fulfill(status=503 if case=='error' else 200,json=data);return
      if '/api/max/orders' in path:r.fulfill(json={'linked':True,'orders':[{'number':'A12345','kind':'repair','title':'Тестовая дрель','status':'В ремонте','deadline':None,'sum':1000}]});return
      if '/api/intake/max-list' in path:r.fulfill(json={'requests':[]});return
@@ -34,13 +34,17 @@ with sync_playwright() as p:
     card=page.locator('.loyalty')
     if case in ['off','error']:expect(card).to_have_count(0)
     else:
-     expect(card).to_be_visible();expect(card).to_contain_text('История неполная')
+     expect(card).to_be_visible()
+     if case=='eligible':expect(card).not_to_contain_text('История неполная')
+     else:expect(card).to_contain_text('История неполная')
+     expect(card).not_to_contain_text('проверит сотрудник');expect(card).not_to_contain_text('Повторить сверку')
+     expect(card).to_contain_text('Перед выдачей сотрудник проверит стоимость техники')
      expect(card).to_contain_text('Завершено аренд: '+str(2 if case=='two' else 0 if case=='ambiguous' else 3)+' из 3')
      card.locator('summary').click()
      if case=='ambiguous':expect(card).to_contain_text('Записей об арендах в реестре пока нет')
      else:expect(card).to_contain_text('1 200 ₽')
-     if case=='eligible':expect(card).to_contain_text('С 4-й аренды — без залога (подтвердит сотрудник)')
-     if case=='blocked':expect(card).to_contain_text('Нужна сверка задолженности')
+     if case=='eligible':expect(card).to_contain_text('С 4-й аренды — без залога. Право рассчитано автоматически по истории аренд.')
+     if case=='blocked':expect(card).to_contain_text('Нет данных о расчёте')
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     assert not errors,errors
     page.screenshot(path=str(out/f'{base}-{width}-{case}.png'),full_page=True)
