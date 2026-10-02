@@ -8,30 +8,32 @@ function date(value: string | number) {
 }
 
 /** The server owns eligibility, identity, completeness and the completed count. */
-export function RentalLoyaltyCard({ refresh }: { refresh: number }) {
+export function RentalLoyaltyCard({ refresh, enabled }: { refresh: number; enabled: boolean }) {
   const [data, setData] = useState<RentalLoyalty | null>(null);
   const [failed, setFailed] = useState(false);
+  const [pending, setPending] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState(-1);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let cancelled = false;
-    if (!hasInitData()) return;
-    setFailed(false);
+    if (!enabled || !hasInitData()) { setData(null); return; }
+    setPending(true);
     fetchRentalLoyalty().then(result => {
-      if (!cancelled) setData(result);
+      if (!cancelled) { setData(result); setFailed(false); setPending(false); setLastRefresh(refresh); }
     }).catch(() => {
       // Without an enabled response, keep the default-off UI hidden.
-      if (!cancelled) setFailed(true);
+      if (!cancelled) { setFailed(true); setPending(false); }
     });
     return () => { cancelled = true; };
-  }, [refresh, attempt]);
-  if (!data?.enabled || !data.linked) return null;
+  }, [enabled, refresh, attempt]);
+  if (!enabled || !data?.enabled || !data.linked) return null;
   const count = Math.max(0, Math.floor(data.completed_rentals));
   return (
     <section className="note loyalty" aria-labelledby="loyalty-title">
       <h2 id="loyalty-title" className="section__title">Аренда без залога</h2>
       <p><strong>Завершено аренд: {count} из 3</strong></p>
       <progress max={3} value={Math.min(count, 3)} aria-label={`Завершено аренд: ${count} из 3`} style={{ width: '100%', accentColor: 'var(--accent, #E33B00)' }} />
-      {data.eligible && !failed ? (
+      {data.eligible && !failed && !pending && lastRefresh === refresh ? (
         <p>С 4-й аренды — без залога. Право рассчитано автоматически по истории аренд.</p>
       ) : count < 3 ? (
         <p>Для аренды без залога нужно завершить ещё {3 - count} {count === 2 ? 'аренду' : 'аренды'}.</p>
@@ -40,7 +42,8 @@ export function RentalLoyaltyCard({ refresh }: { refresh: number }) {
       <p>Без залога — при отсутствии просрочки, долга и невозмещённого ущерба. Перед выдачей сотрудник проверит стоимость техники. Для техники стоимостью от 300 000 ₽ нужен залог.</p>
       {!data.history_complete && <p><strong>История неполная.</strong> Показаны доступные данные учёта. Право пересчитывается автоматически при обновлении данных.</p>}
       <p>{data.checked_at ? `Данные обновлены: ${date(data.checked_at)}` : 'Данные для расчёта ещё не получены.'}</p>
-      {failed && <p role="status">Не удалось обновить данные. Показана предыдущая история; актуальное право пока не подтверждено. <button className="btn btn--ghost" onClick={() => setAttempt(n => n + 1)}>Обновить данные</button></p>}
+      {failed && <p role="status">Не удалось обновить данные. Показана предыдущая история; актуальное право пока не подтверждено.</p>}
+      <button className="btn btn--ghost" disabled={pending} onClick={() => { setPending(true); setAttempt(n => n + 1); }}>{pending ? 'Обновляем данные…' : 'Обновить данные'}</button>
       <details>
         <summary>История аренд по реестру ({data.history.length})</summary>
         {data.history.length === 0 ? <p>Записей об арендах в реестре пока нет.</p> : <ol>

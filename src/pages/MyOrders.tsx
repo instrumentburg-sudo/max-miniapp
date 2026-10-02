@@ -89,6 +89,7 @@ export function MyOrders() {
   const navigate = useNavigate();
   const intakeRequests = useIntakeRequests();
   const [loading, setLoading] = useState(true);
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
   const [linked, setLinked] = useState(true);
   const [orders, setOrders] = useState<ClientOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,11 +108,13 @@ export function MyOrders() {
     }
 
     setLoading(true);
+    setLoyaltyEnabled(false);
     setError(null);
 
     fetchMyOrders()
       .then((res) => {
         if (cancelled) return;
+        setLoyaltyEnabled(res.loyalty_enabled === true);
         // Связки LS нет — оставляем доступным независимый список Z.
         if (!res.linked) {
           setLinked(false);
@@ -146,6 +149,7 @@ export function MyOrders() {
 
   const retry = () => {
     hapticTap();
+    setLoyaltyEnabled(false);
     setAttempt((n) => n + 1);
   };
 
@@ -153,7 +157,7 @@ export function MyOrders() {
     return (
       <Screen eyebrow="Личный кабинет" title="Мои заказы">
         <IntakeRequests items={intakeRequests} />
-        <RentalLoyaltyCard refresh={attempt} />
+        <RentalLoyaltyCard refresh={attempt} enabled={loyaltyEnabled} />
         <div className="section__list">
           <TicketSkeleton />
           <TicketSkeleton />
@@ -166,7 +170,7 @@ export function MyOrders() {
     return (
       <Screen eyebrow="Личный кабинет" title="Мои заказы">
         <IntakeRequests items={intakeRequests} />
-        <RentalLoyaltyCard refresh={attempt} />
+        <RentalLoyaltyCard refresh={attempt} enabled={loyaltyEnabled} />
         <div className="link__stack">
           <div className="note note--error">
             <span className="note__head">Не получилось</span>
@@ -195,7 +199,7 @@ export function MyOrders() {
   return (
     <Screen eyebrow="Личный кабинет" title="Мои заказы">
         <IntakeRequests items={intakeRequests} />
-        <RentalLoyaltyCard refresh={attempt} />
+        <RentalLoyaltyCard refresh={attempt} enabled={loyaltyEnabled} />
       {!linked && <button className="btn btn--primary" onClick={() => navigate('/link')}>Подтвердить телефон для заказов</button>}
       {linked && repairs.length === 0 && rentals.length === 0 && (
         <div className="empty">

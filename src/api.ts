@@ -245,6 +245,7 @@ export interface ClientOrder {
 }
 
 export interface MyOrdersResponse {
+  loyalty_enabled?: boolean;
   linked: boolean;
   orders: ClientOrder[];
 }
