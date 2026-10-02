@@ -420,3 +420,21 @@ export async function fetchIntakeRequests(): Promise<{ requests: IntakeRequest[]
     return await res.json();
   } finally { window.clearTimeout(timer); }
 }
+
+
+export type RentalLoyalty = { enabled: false } | {
+  enabled: true;
+  linked: boolean;
+  completed_rentals: number;
+  eligible: boolean;
+  blocking_reasons: string[];
+  history_complete: boolean;
+  checked_at: number | null;
+  rule_version: string;
+  history: Array<{ order_id: string; closed_at?: string; rental_amount_kopecks?: number; completed: boolean; reasons: string[] }>;
+};
+
+/** Independent registry, never derived from the limited LiveSklad search list. */
+export function fetchRentalLoyalty(): Promise<RentalLoyalty> {
+  return convexPost<RentalLoyalty>('/api/max/loyalty', {});
+}

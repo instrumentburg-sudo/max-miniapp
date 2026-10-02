@@ -1553,6 +1553,7 @@ function handle_convex_proxy(string $upstreamPath): void
     $allowed = [
         '/api/max/link'   => 'POST',
         '/api/max/orders' => 'POST',
+        '/api/max/loyalty' => 'POST',
         '/api/max/order'  => 'POST',
         '/api/order'      => 'GET',
         '/api/outcome'    => 'POST',

@@ -1,3 +1,4 @@
+import { RentalLoyaltyCard } from '../components/RentalLoyalty';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { hapticError, hapticTap, hasInitData } from '../bridge';
@@ -152,6 +153,7 @@ export function MyOrders() {
     return (
       <Screen eyebrow="Личный кабинет" title="Мои заказы">
         <IntakeRequests items={intakeRequests} />
+        <RentalLoyaltyCard refresh={attempt} />
         <div className="section__list">
           <TicketSkeleton />
           <TicketSkeleton />
@@ -164,6 +166,7 @@ export function MyOrders() {
     return (
       <Screen eyebrow="Личный кабинет" title="Мои заказы">
         <IntakeRequests items={intakeRequests} />
+        <RentalLoyaltyCard refresh={attempt} />
         <div className="link__stack">
           <div className="note note--error">
             <span className="note__head">Не получилось</span>
@@ -192,6 +195,7 @@ export function MyOrders() {
   return (
     <Screen eyebrow="Личный кабинет" title="Мои заказы">
         <IntakeRequests items={intakeRequests} />
+        <RentalLoyaltyCard refresh={attempt} />
       {!linked && <button className="btn btn--primary" onClick={() => navigate('/link')}>Подтвердить телефон для заказов</button>}
       {linked && repairs.length === 0 && rentals.length === 0 && (
         <div className="empty">
